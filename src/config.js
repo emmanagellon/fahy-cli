@@ -7,12 +7,14 @@ const file = join(dir, 'config.json');
 
 const defaults = {
   defaultProvider: { anime: 'hianime', youtube: 'youtube', music: 'ytmusic' },
+  autoUpdate: 'notice', // notice | install | off
   volume: 100,
   shuffle: false,
   repeat: 'off', // off | one | all
 };
 
 const REPEATS = new Set(['off', 'one', 'all']);
+const AUTO_UPDATE = new Set(['notice', 'install', 'off']);
 
 function sanitize(raw) {
   const cfg = { ...defaults, ...(raw || {}) };
@@ -20,6 +22,7 @@ function sanitize(raw) {
   const vol = Number(cfg.volume);
   cfg.volume = Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : defaults.volume;
   cfg.shuffle = cfg.shuffle === true;
+  if (!AUTO_UPDATE.has(cfg.autoUpdate)) cfg.autoUpdate = defaults.autoUpdate;
   if (!REPEATS.has(cfg.repeat)) cfg.repeat = defaults.repeat;
   return cfg;
 }

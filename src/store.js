@@ -206,6 +206,18 @@ export function setSourceSync(patch) {
   save('sources.json', { ...getSourceSync(), ...(patch || {}) });
 }
 
+// Daily update-check state: last successful registry lookup + the version
+// seen then. Gates the auto-update watcher to one check per run-day; a
+// manual `fahy upgrade` resets the window by recording fresh state.
+export function getUpdateState() {
+  const s = load('update.json', {});
+  return s && typeof s === 'object' ? s : {};
+}
+
+export function setUpdateState(patch) {
+  save('update.json', { ...getUpdateState(), ...(patch || {}) });
+}
+
 export function resetHealth(id) {
   if (id) {
     const h = getHealth();

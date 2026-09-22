@@ -313,6 +313,48 @@ await ok('sourceSync round-trip (restored)', async () => {
     else fs.writeFileSync(f, had);
   }
 });
+await ok('updateState round-trip (restored)', async () => {
+  const { homedir } = await import('node:os');
+  const { join } = await import('node:path');
+  const fs = await import('node:fs');
+  const f = join(homedir(), '.config', 'fahy-cli', 'update.json');
+  const had = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null;
+  try {
+    store.setUpdateState({ lastCheck: '2026-01-01T00:00:00.000Z', lastVersion: '__smoke__' });
+    assert.equal(store.getUpdateState().lastVersion, '__smoke__');
+  } finally {
+    if (had === null) fs.rmSync(f, { force: true });
+    else fs.writeFileSync(f, had);
+  }
+});
+await ok('config autoUpdate sanitized', async () => {
+  const { loadConfig } = await import('../src/config.js');
+  const c = loadConfig();
+  assert.ok(['notice', 'install', 'off'].includes(c.autoUpdate));
+});
+const upd = await import('../src/update.js');
+await ok('compareVersions numeric', () => {
+  assert.equal(upd.compareVersions('0.6.2', '0.6.2'), 0);
+  assert.equal(upd.compareVersions('0.6.2', '0.6.3'), -1);
+  assert.equal(upd.compareVersions('0.6.3', '0.6.2'), 1);
+  assert.equal(upd.compareVersions('0.10.0', '0.9.9'), 1);
+  assert.equal(upd.compareVersions('1.0.0', '0.99.9'), 1);
+  assert.equal(upd.compareVersions('v0.6.2', '0.6.2'), 0);
+});
+await ok('needsUpdate', () => {
+  assert.equal(upd.needsUpdate('0.6.2', '0.6.2'), false);
+  assert.equal(upd.needsUpdate('0.6.2', '0.7.0'), true);
+  assert.equal(upd.needsUpdate('0.7.0', '0.6.2'), false);
+});
+await ok('installedVersion matches package.json', async () => {
+  const { readFileSync } = await import('node:fs');
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(upd.installedVersion(), pkg.version);
+});
+await ok('sourceCheckout null or path', () => {
+  const t = upd.sourceCheckout();
+  assert.ok(t === null || typeof t === 'string');
+});
 await ok('shell homeItems', async () => {
   const { homeItems } = await import('../src/tui/shell.js');
   const items = homeItems([{ title: 'X', kind: 'anime', episode: 3 }], 'anime');
@@ -567,6 +609,10 @@ await ok('TUI s restarts search from menu', async () => {
 
 // ---------- B. live ----------
 if (live) {  const meta = await import('../src/metadata.js');
+  await ok('LIVE latestVersion semver', async () => {
+    const v = await upd.latestVersion({ timeoutMs: 10000 });
+    assert.match(v, /^\d+\.\d+\.\d+$/);
+  });
   await ok('LIVE searchAnime', async () => {
     const r = await meta.searchAnime('Frieren', 3);
     assert.ok(r.length > 0 && r[0].anilistId);

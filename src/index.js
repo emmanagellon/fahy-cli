@@ -6,10 +6,10 @@ import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
-import { existsSync, readFileSync, rmSync, readlinkSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { searchAnime, ytMix, formatDuration } from './metadata.js';
 import { forKind, getProvider, providers, orderProviders, providerTags } from './providers/registry.js';
 import { animepahe } from './providers/animepahe.js';
@@ -21,7 +21,7 @@ import {
   setDownloadStatus, getCompletedDownloads, getFavorites, toggleFavorite,
   getPlaylists, getPlaylist, playlistAdd, playlistClear, saveRun, historyToMedia,
   getHealth, recordHealth, healthBlocked, resetHealth, shouldAutoPin, scoreOf,
-  getSourceSync, setSourceSync,
+  getSourceSync, setSourceSync, getUpdateState, setUpdateState,
 } from './store.js';
 import { loadConfig, saveConfig, configPath } from './config.js';
 import {
@@ -31,23 +31,15 @@ import {
 } from './tui/shell.js';
 import { runSearchTui } from './tui/search.js'; // flag-mode one-off screens (shell owns TUI mode)
 import { classifyFailure } from './failure.js';
+import { installedVersion, needsUpdate, latestVersion, upgrade } from './update.js';
 import { probeUrl, probePassesForPlayback } from './probe.js';
 import { MusicPlayer } from './mplayer.js';
 import { fetchFmhyAnimeSites, diffFmhySources } from './sources.js';
 
-function packageVersion() {
-  try {
-    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-    return pkg.version || '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
-
 const program = new Command();
 program
   .name('fahy')
-  .version(packageVersion())
+  .version(installedVersion())
   .description('Anime, YouTube and music terminal player (mpv-only)')
   .option('-S, --search <query>', 'search query')
   .option('-a, --anime', 'anime mode (AniList + anime providers)')
@@ -89,6 +81,7 @@ program
   .option('--provider-health', 'show per-provider health memory')
   .option('--reset-health [id]', 'forget health memory (one provider, or all)')
   .option('--upgrade [version]', 'upgrade fahy (latest, or pin: --upgrade 0.6.2)')
+  .option('--auto-update [mode]', 'update policy: notice|install|off (default notice)')
   .option('--uninstall', 'remove the global fahy install (add --purge for config too)')
   .option('--purge', 'with --uninstall: also delete ~/.config/fahy-cli')
   .option('--check-sources', 'diff anime providers against live FMHY list + probe health')
@@ -121,6 +114,7 @@ process.stderr.on('error', () => {});
 const opts = program.opts();
 const config = loadConfig();
 const debug = !!opts.debug;
+const AUTO_UPDATE_MODES = ['notice', 'install', 'off'];
 // kunai-style bare commands: `fahy upgrade`, `fahy uninstall [--purge]`.
 // (program.args holds positionals commander didn't consume as options.)
 {
@@ -176,10 +170,27 @@ if (opts.volume !== undefined) {
   config.volume = next;
   console.log(`Volume ${next}.`);
 }
+if (opts.autoUpdate !== undefined) {
+  // `fahy --auto-update` shows the policy; `--auto-update <mode>` sets it.
+  const cur = AUTO_UPDATE_MODES.includes(config.autoUpdate) ? config.autoUpdate : 'notice';
+  const mode = typeof opts.autoUpdate === 'string' && opts.autoUpdate ? opts.autoUpdate.toLowerCase() : null;
+  if (mode !== null && !AUTO_UPDATE_MODES.includes(mode)) {
+    console.error(chalk.red('auto-update takes notice|install|off.'));
+    process.exit(1);
+  }
+  if (mode !== null) {
+    saveConfig({ ...config, autoUpdate: mode });
+    config.autoUpdate = mode;
+    console.log(`Auto-update: ${mode}.`);
+  } else {
+    const hints = { notice: ' — notify when a new version exists', install: ' — apply updates automatically', off: ' — never check automatically' };
+    console.log(`Auto-update: ${cur}${hints[cur]}.`);
+  }
+}
 // Bare mode flags behave like ym control commands: apply + exit, unless
 // combined with something to play.
 if (
-  (opts.volume !== undefined || opts.shuffle !== undefined || opts.repeat) &&
+  (opts.volume !== undefined || opts.shuffle !== undefined || opts.repeat || opts.autoUpdate !== undefined) &&
   !opts.search && !opts.url && !opts.continue && !opts.radio &&
   !opts.download && !opts.printUrl && !opts.playlist && !opts.offline && !opts.library
 ) {
@@ -305,6 +316,13 @@ if (opts.doctor || opts.setup) {
   console.log(`config:   ${configPath()}`);
   console.log(`downloads:${config.downloadPath || defaultDownloadDir()}`);
   console.log(`music:    ${defaultMusicDir()}`);
+  console.log(`version:  ${installedVersion()}`);
+  try {
+    const latest = await latestVersion({ timeoutMs: 6000, debug });
+    console.log(`latest:   ${latest}${needsUpdate(installedVersion(), latest) ? chalk.yellow(' — update available (fahy upgrade)') : chalk.green(' (current)')}`);
+  } catch {
+    console.log(`latest:   ${chalk.yellow('unreachable (offline? — fahy upgrade retries)')}`);
+  }
   if (opts.setup && (!hasMpv() || !hasYtDlp())) {
     console.log(chalk.dim('\nInstall the missing tools above, then: fahy -S "<title>"'));
   } else if (opts.setup) {
@@ -318,37 +336,21 @@ if (opts.doctor || opts.setup) {
 }
 if (opts.upgrade !== undefined) {
   // Channel-aware like kunai: a linked source checkout upgrades via git,
-  // a registry install via npm. `npm ls -g` marks links with `-> target`.
+  // a registry install via npm. `upgrade()` shares the auto-update engine.
   const want = typeof opts.upgrade === 'string' && opts.upgrade ? opts.upgrade : 'latest';
-  let listed = '';
-  try {
-    listed = execSync('npm ls -g fahy-cli', { encoding: 'utf8', shell: false });
-  } catch {}
-  const link = /fahy-cli@[^\s]*\s+->\s+(\S+)/.exec(listed)?.[1];
-  if (link) {
-    // Source checkout: read the real junction target (lexical .. resolution
-    // is unreliable on Windows) and git pull there.
-    let target = null;
+  console.log(want === 'latest' ? 'Checking for updates…' : `Upgrading fahy-cli to ${want}…`);
+  const res = upgrade({ wanted: want, debug, verbose: true });
+  if (res.ok) {
+    console.log(chalk.green(res.message));
+    // A successful upgrade implies newest — reset the daily window so the
+    // auto-check does not re-notify about the version we just installed.
     try {
-      const root = execSync('npm root -g', { encoding: 'utf8', shell: false }).trim();
-      target = readlinkSync(join(root, 'fahy-cli'));
+      setUpdateState({ lastCheck: new Date().toISOString(), lastVersion: installedVersion() });
     } catch {}
-    if (!target) {
-      console.log(chalk.yellow('Source install detected, but its location is unreadable — update it manually.'));
-      process.exit(0);
-    }
-    console.log(chalk.dim(`Source install detected (${target}) — upgrading via git pull…`));
-    try {
-      execSync('git pull --ff-only', { cwd: target, stdio: 'inherit', shell: false });
-      console.log(chalk.green('Updated. Restart fahy to use it (npm link needs no reinstall).'));
-    } catch {
-      console.log(chalk.yellow(`Could not git pull in ${target} — update it manually.`));
-    }
     process.exit(0);
   }
-  console.log(`Upgrading fahy-cli to ${want} via npm…`);
-  const r = spawnSync('npm', ['install', '-g', `fahy-cli@${want}`], { stdio: 'inherit', shell: false });
-  process.exit(r.status ?? 1);
+  console.log(chalk.yellow(res.message));
+  process.exit(1);
 }
 if (opts.uninstall) {
   console.log('Removing global fahy-cli…');
@@ -566,6 +568,53 @@ async function maybeDailyFmhySync({ background = false } = {}) {
       await run;
     } catch (e) {
       if (debug) console.error(`[fahy-sync] ${e.message}`);
+    }
+  }
+}
+
+// Daily update watcher: once per 24h on interactive runs, ask the npm
+// registry if a newer version exists. 'notice' (default) prints one line
+// pointing at `fahy upgrade`; 'install' applies it in place, quietly, so npm
+// never paints over the running shell; 'off' disables checks. Failures are
+// silent — tomorrow retries. A manual --upgrade resets the window.
+const UPDATE_CHECK_MS = 24 * 3600 * 1000;
+async function maybeCheckForUpdates({ config: cfg, background = false } = {}) {
+  if (!process.stdin.isTTY || opts.printUrl) return;
+  const mode = AUTO_UPDATE_MODES.includes(cfg?.autoUpdate) ? cfg.autoUpdate : 'notice';
+  if (mode === 'off') return;
+  let state = {};
+  try {
+    state = getUpdateState();
+  } catch {
+    return;
+  }
+  if (state.lastCheck && Date.now() - Date.parse(state.lastCheck) < UPDATE_CHECK_MS) return;
+  const run = (async () => {
+    const current = installedVersion();
+    let latest;
+    try {
+      latest = await latestVersion({ timeoutMs: 8000, debug });
+    } catch {
+      setUpdateState({ lastCheck: new Date().toISOString(), lastVersion: state.lastVersion });
+      return;
+    }
+    setUpdateState({ lastCheck: new Date().toISOString(), lastVersion: latest });
+    if (!needsUpdate(current, latest)) return;
+    if (mode === 'install') {
+      tlog(`Updating fahy ${current} → ${latest}…`, 'dim');
+      const res = upgrade({ wanted: latest, debug });
+      tlog(res.ok ? `Updated to ${latest}. Restart fahy to use it.` : `Update failed: ${res.message}`, res.ok ? 'ok' : 'warn');
+      return;
+    }
+    tlog(`Update available: fahy v${current} → v${latest} — run \`fahy upgrade\` to apply.`, 'warn');
+  })();
+  if (background) {
+    run.catch(() => {});
+  } else {
+    try {
+      await run;
+    } catch (e) {
+      if (debug) console.error(`[fahy-update] ${e.message}`);
     }
   }
 }
@@ -810,6 +859,7 @@ async function main() {
     setShellConfig(config);
     startShell(kind);
     void maybeDailyFmhySync({ background: true }); // notices land in the transcript when done
+    void maybeCheckForUpdates({ config, background: true });
     const bye = (code) => {
       stopShell();
       process.exit(code);
@@ -865,6 +915,7 @@ async function main() {
       provider = await pickProvider(media);
     }
   await maybeDailyFmhySync(); // stale-day check before playback (fast when fresh)
+  await maybeCheckForUpdates({ config });
   await sessionLoop(media, provider);
 }
 
