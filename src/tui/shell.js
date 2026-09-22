@@ -439,11 +439,12 @@ function renderMenu() {
 }
 
 function renderError() {
+  // No in-screen hint here — the frame footer already says it (doubling the
+  // line is what produced the stacked "any key to continue" look).
   return e(
     Box,
     { flexDirection: 'column' },
-    e(Text, { color: 'red' }, '✕ ' + short(S.errorBox?.message || 'Something failed.', 200)),
-    e(Box, { marginTop: 1 }, e(Text, { dimColor: true }, 'any key to continue'))
+    e(Text, { color: 'red' }, '✕ ' + short(S.errorBox?.message || 'Something failed.', 200))
   );
 }
 

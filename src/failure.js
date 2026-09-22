@@ -35,7 +35,7 @@ export function classifyFailure(err, providerId) {
     cls = 'auth';
   } else if (/403|blocked|cloudflare|just a moment|captcha|access denied|challenge/i.test(lower)) {
     cls = 'blocked';
-  } else if (/no .*playable|no streams|not found|no entry|no episodes|no results/i.test(lower)) {
+  } else if (/no .*playable|no streams|not found|no entry|no episodes|no episode|no results/i.test(lower)) {
     cls = 'provider-empty';
   } else if (/parse|unexpected token|invalid json|not valid json/i.test(lower)) {
     cls = 'provider-parse';

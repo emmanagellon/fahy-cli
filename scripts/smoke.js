@@ -39,12 +39,16 @@ const { classifyFailure } = await import('../src/failure.js');
 const classes = {
   'fetch failed': 'network', 'Connect Timeout Error': 'timeout', 'HTTP 429': 'rate-limited',
   'HTTP 403 blocked': 'blocked', 'HTTP 401': 'auth', 'no playable stream': 'provider-empty',
+  'HiAnime has no episode 2 for X (1 listed)': 'provider-empty',
   'unexpected token': 'provider-parse', cancelled: 'user-cancelled', 'getaddrinfo ENOTFOUND x': 'offline',
 };
 for (const [msg, cls] of Object.entries(classes)) {
   await ok(`classify ${cls}`, () => assert.equal(classifyFailure(new Error(msg)).class, cls));
 }
 await ok('auto-fallback policy', () => assert.equal(classifyFailure(new Error('fetch failed')).policy, 'auto-fallback'));
+await ok('episode-missing falls back, not fatal', () => {
+  assert.equal(classifyFailure(new Error('HiAnime has no episode 2 for X (1 listed)')).policy, 'auto-fallback');
+});
 
 const { probePassesForPlayback } = await import('../src/probe.js');
 await ok('probe pass reachable', () => assert.equal(probePassesForPlayback({ status: 'reachable' }), true));

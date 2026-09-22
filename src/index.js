@@ -1270,8 +1270,9 @@ async function finish(media, provider) {
       tlog(`Default ${media.kind} provider → ${cand.name} (previous default unhealthy).`);
     }
   };
-  const unhealthy = !strict ? avail.filter((x) => x.id !== provider.id && healthBlocked(x.id)) : [];
-  for (const s of unhealthy) tlog(`  ${s.name}: unhealthy streak — trying last (--reset-health to forgive)`);
+  const unhealthyIds = new Set(
+    (!strict ? avail.filter((x) => x.id !== provider.id && healthBlocked(x.id)) : []).map((x) => x.id)
+  );
   const failures = [];
   const deadThisSession = new Set(); // don't re-probe/retry a URL that already died
   const androidTried = new Set(); // android-client retries already spent per URL
@@ -1283,14 +1284,20 @@ async function finish(media, provider) {
   const vet = media.kind !== 'youtube' && media.kind !== 'music';
   for (const cand of ordered) {
     const t0 = Date.now();
+    // Unhealthy notice lands here (at try time), not upfront — one line per
+    // provider actually attempted, never a stale repeated preamble.
+    if (unhealthyIds.has(cand.id)) tlog(`  ${cand.name}: unhealthy streak — trying last (--reset-health to forgive)`);
     let resolved;
     try {
       resolved = await resolveMedia(cand, media);
     } catch (e) {
       const c = classifyFailure(e, cand.id);
-      tlog(`  ${cand.name}: ${c.summary}`, 'warn');
+      // Summary plus the underlying reason — a bare "unexpected issue"
+      // hides whether it's a wrong title, a dead CDN, or a site change.
+      const reason = c.detail && c.detail !== c.summary ? ` (${c.detail.slice(0, 140)})` : '';
+      tlog(`  ${cand.name}: ${c.summary}${reason}`, 'warn');
       failures.push(`${cand.id} (${c.class})`);
-      mark(cand.name, false, c.summary);
+      mark(cand.name, false, `${c.summary}${reason}`);
       recordHealth(cand.id, { ok: false });
       if (c.policy === 'auto-fallback' && !strict) continue;
       persistTrail();
