@@ -186,7 +186,7 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
   }
   const group = pickGroup(parseServerGroups(svJson.result), audio);
   if (!group) throw new Error(`${label} has no ${audio} servers for "${title}" E${ep.num}`);
-  const sources = [];
+  let sources = [];
   for (const s of group.servers.slice(0, 4)) {
     try {
       // The clone family hands the server token straight to /ajax/server?get=
@@ -216,6 +216,10 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
     }
   }
   if (!sources.length) throw new Error(`${label} servers all failed for "${title}" E${ep.num}`);
+  // Several servers on the same video host share one master (megaplay HLS):
+  // collapse identical URLs so the picker isn't full of clones.
+  const seen = new Set();
+  sources = sources.filter((s) => (seen.has(s.url) ? false : (seen.add(s.url), true)));
   // The '#' dialect has no per-episode href — rebuild it from the show path.
   const watchRef = ep.href || `${(show.path || `/watch/${show.slug}`).replace(/\/ep-\d+$/i, '')}/ep-${ep.num}`;
   return { embedUrl: absUrl(mirror, watchRef), sources };

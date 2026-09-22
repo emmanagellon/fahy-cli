@@ -280,7 +280,9 @@ export const kickassanime = {
             const segUrl = seg.startsWith('//') ? `https:${seg}` : new URL(seg, variant.url).href;
             const s = await fetch(segUrl, { headers: headersFor(segUrl), signal: ac.signal });
             await s.body?.cancel?.().catch(() => {});
-            return { variant, ok: s.status !== 404 };
+            // 4xx with the right Origin headers = dead rendition (403 too, not
+            // just 404); 5xx/timeouts are tolerated (transient overload).
+            return { variant, ok: ![403, 404, 410].includes(s.status) };
           } finally {
             clearTimeout(timer);
           }

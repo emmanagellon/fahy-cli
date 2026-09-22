@@ -1347,35 +1347,47 @@ async function finish(media, provider) {
         if (!p.isCancel(pick)) source = alive[Number(pick)];
       }
     }
-    const outcome = await playOrDownload(media, cand, source);
-    if (outcome === 'ok') {
-      mark(cand.name, true, source.quality);
-      recordHealth(cand.id, { ok: true, ms: Date.now() - t0 });
-      maybeAutoPin(cand);
-      persistTrail();
-      return;
-    }
-    // YouTube/music are single-lane: before giving up, retry the same source
-    // through the Android client (kids/restricted videos 403 otherwise).
-    // Same provider, same source — allowed even in strict mode.
-    if ((media.kind === 'youtube' || media.kind === 'music') && !androidTried.has(source.url)) {
-      androidTried.add(source.url);
-      tlog('  Retrying with Android client…');
-      const outcome2 = await playOrDownload(media, cand, source, { android: true });
-      if (outcome2 === 'ok') {
-        mark(cand.name, true, `${source.quality} (android client)`);
+    // One dead rendition must not sink a provider with several verified ones
+    // (KAA tiers, anikoto servers): play failure hands off to the next source
+    // of the SAME provider, then falls through to the next provider.
+    const deduped = [...new Map(alive.map((s) => [s.url, s])).values()];
+    const queue = [source, ...deduped.filter((s) => s !== source)];
+    let lastOutcome = 'retry';
+    let played = false;
+    for (const attempt of queue) {
+      if (deadThisSession.has(attempt.url)) continue;
+      let outcome = await playOrDownload(media, cand, attempt);
+      if (outcome === 'ok') {
+        mark(cand.name, true, attempt.quality);
         recordHealth(cand.id, { ok: true, ms: Date.now() - t0 });
         maybeAutoPin(cand);
         persistTrail();
-        return;
+        played = true;
+        break;
       }
-      failures.push(`${cand.id} (android-retry)`);
-      mark(cand.name, false, 'android retry failed');
-      recordHealth(cand.id, { ok: false });
+      lastOutcome = outcome;
+      // YouTube/music are single-lane: before giving up, retry the same source
+      // through the Android client (kids/restricted videos 403 otherwise).
+      // Same provider, same source — allowed even in strict mode.
+      if ((media.kind === 'youtube' || media.kind === 'music') && !androidTried.has(attempt.url)) {
+        androidTried.add(attempt.url);
+        tlog('  Retrying with Android client…');
+        const outcome2 = await playOrDownload(media, cand, attempt, { android: true });
+        if (outcome2 === 'ok') {
+          mark(cand.name, true, `${attempt.quality} (android client)`);
+          recordHealth(cand.id, { ok: true, ms: Date.now() - t0 });
+          maybeAutoPin(cand);
+          persistTrail();
+          played = true;
+          break;
+        }
+        lastOutcome = outcome2;
+      }
+      deadThisSession.add(attempt.url);
     }
-    deadThisSession.add(source.url);
-    failures.push(`${cand.id} (${outcome})`);
-    mark(cand.name, false, `mpv/yt-dlp ${outcome}`);
+    if (played) return;
+    failures.push(`${cand.id} (${lastOutcome})`);
+    mark(cand.name, false, `mpv/yt-dlp ${lastOutcome}`);
     recordHealth(cand.id, { ok: false });
     // outcome 'retry' (mpv/yt-dlp failed fast): fall through to next provider.
   }
