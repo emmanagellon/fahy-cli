@@ -16,7 +16,7 @@ irm https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.ps1 | i
 curl -fsSL https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.sh | bash
 ```
 
-Scripts install Node.js 18+, mpv, and yt-dlp if missing. Alternatives: `npm install -g fahy-cli`, or clone + `npm link`. Update with `fahy upgrade`, remove with `fahy uninstall` (`--purge` also deletes local data).
+Scripts install Node.js 18+, mpv, and yt-dlp if missing. Alternatives: `npm install -g fahy-cli`, or clone + `npm link`. Update with `fahy upgrade` (or rerun the installer); fahy checks GitHub daily and prompts when a newer version is out. Remove with `fahy uninstall` (`--purge` also deletes local data).
 
 ## Use
 

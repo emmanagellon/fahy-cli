@@ -1,15 +1,21 @@
-// Automatic update system — once a day on interactive runs we ask the npm
-// registry whether a newer version exists and surface a one-line notice
-// (or, with autoUpdate 'install', apply it in place). Failures are silent:
-// offline or flaky registries never block playback and just retry tomorrow.
-// Source checkouts (npm link) upgrade via git; registry installs via npm.
+// Automatic update system — once a day on interactive runs we ask GitHub
+// (the distribution channel today; npm post-publication) whether a newer
+// version exists and surface a one-line notice (or, with autoUpdate
+// 'install', apply it in place). Failures are silent: offline or flaky
+// networks never block playback and just retry tomorrow. The version of
+// `main`'s package.json is the source of truth, so bump version on each
+// release push. Source checkouts (npm link) upgrade via git, GitHub installs
+// reinstall from GitHub, registry installs via npm.
 import { readFileSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
 import { fetchJsonVia } from './net.js';
 
-const REGISTRY_LATEST = 'https://registry.npmjs.org/fahy-cli/latest';
 const PKG_NAME = 'fahy-cli';
+const REPO = 'emmanagellon/fahy-cli';
+const REGISTRY_LATEST = `https://registry.npmjs.org/${PKG_NAME}/latest`;
+const GH_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/package.json`;
+const GH_INSTALL = `github:${REPO}`;
 
 export function installedVersion() {
   try {
@@ -36,12 +42,31 @@ export function needsUpdate(current, latest) {
   return compareVersions(current, latest) < 0;
 }
 
-// Latest published version from npm. Throws on any registry failure.
+// Newest published version. Prefers the live GitHub manifest; falls back to
+// npm for a post-publication world. Throws if neither answers.
 export async function latestVersion({ timeoutMs = 8000, debug } = {}) {
-  const pkg = await fetchJsonVia(`${REGISTRY_LATEST}`, { timeoutMs, userAgent: PKG_NAME, debug });
-  const v = pkg?.version;
-  if (typeof v !== 'string' || !v) throw new Error('registry replied without a version');
-  return v;
+  try {
+    const pkg = await fetchJsonVia(GH_MANIFEST, { timeoutMs, userAgent: PKG_NAME, debug });
+    const v = pkg?.version;
+    if (typeof v !== 'string' || !v) throw new Error('manifest replied without a version');
+    return v;
+  } catch (e) {
+    if (debug) console.error(`[update] github manifest failed (${e.message}); trying npm`);
+    const pkg = await fetchJsonVia(REGISTRY_LATEST, { timeoutMs, userAgent: PKG_NAME, debug });
+    const v = pkg?.version;
+    if (typeof v !== 'string' || !v) throw new Error('registry replied without a version');
+    return v;
+  }
+}
+
+// Which npm spec to reinstall from: GitHub for a github: install (different
+// `resolved` shape than a plain registry package), the registry otherwise.
+function installSpec(wanted) {
+  try {
+    const listed = execSync('npm ls -g fahy-cli --json', { encoding: 'utf8', shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (new RegExp(`github\\.com/${REPO.replace('/', '\\/')}`, 'i').test(listed)) return GH_INSTALL;
+  } catch {}
+  return wanted === 'latest' ? PKG_NAME : `${PKG_NAME}@${wanted}`;
 }
 
 // npm marks symlinked (npm link) installs as `-> target`. Returns the real
@@ -67,7 +92,6 @@ export function sourceCheckout() {
 // child stdio inherited); the automatic path stays quiet so npm never paints
 // over the running shell. Returns { ok, method, message }.
 export function upgrade({ wanted = 'latest', debug, verbose = false } = {}) {
-  const spec = wanted === 'latest' ? PKG_NAME : `${PKG_NAME}@${wanted}`;
   const stdio = verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'];
   const detail = (r) =>
     verbose ? '' : ` (${Buffer.from(r.stderr || []).toString().trim().split('\n')[0] || `exit ${r.status}`})`;
@@ -80,9 +104,11 @@ export function upgrade({ wanted = 'latest', debug, verbose = false } = {}) {
     }
     return { ok: false, method: 'git', message: `Could not git pull in ${target}${detail(r)} — update it manually.` };
   }
+  const spec = installSpec(wanted);
   const r = spawnSync('npm', ['install', '-g', spec], { shell: false, stdio });
   if (r.status === 0) {
-    return { ok: true, method: 'npm', message: `Updated to ${wanted}. Restart fahy to use it.` };
+    const asTxt = spec.startsWith('github:') ? 'the latest GitHub build' : wanted;
+    return { ok: true, method: spec.startsWith('github:') ? 'github' : 'npm', message: `Updated to ${asTxt}. Restart fahy to use it.` };
   }
   return { ok: false, method: 'npm', message: `npm install -g ${spec} failed${detail(r)} — retry with fahy upgrade.` };
 }

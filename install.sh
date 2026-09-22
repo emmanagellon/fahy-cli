@@ -4,15 +4,15 @@
 # Installs everything fahy needs, automatically:
 #   1. Node.js 18+ (brew / apt via NodeSource / dnf / pacman).
 #   2. mpv + yt-dlp (same package managers; skip with --skip-deps).
-#   3. fahy globally via npm (registry, or GitHub source pre-publish).
+#   3. fahy globally via npm (GitHub channel by default; npm registry once published).
 #   4. Runs `fahy --doctor` to prove the install.
 #
 #   curl -fsSL https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --version latest --method npm
+#   curl -fsSL .../install.sh | bash -s -- --version latest --method source
 set -euo pipefail
 
 VERSION="latest"
-METHOD="npm"
+METHOD="source"
 SKIP_DEPS=0
 DRY_RUN=0
 REPO="emmanagellon/fahy-cli"

@@ -3,16 +3,16 @@
 # Installs everything fahy needs, automatically:
 #   1. Node.js 18+ via winget (skipped if already present).
 #   2. mpv + yt-dlp via winget (skip with -SkipDeps).
-#   3. fahy globally via npm (registry, or GitHub source pre-publish).
+#   3. fahy globally via npm (GitHub channel by default; npm registry once published).
 #   4. Runs `fahy --doctor` to prove the install.
 #
 # Usage:
 #   irm https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.ps1 | iex
 #   # or with options:
-#   & ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.ps1))) -Version latest -Method npm
+#   & ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.ps1))) -Version latest -Method source
 param(
   [string]$Version = "latest",
-  [ValidateSet("npm", "source")][string]$Method = "npm",
+  [ValidateSet("npm", "source")][string]$Method = "source",
   [switch]$SkipDeps,
   [switch]$DryRun
 )
