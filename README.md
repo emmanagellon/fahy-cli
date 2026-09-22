@@ -2,7 +2,7 @@
 
 Anime, YouTube, and music in your terminal. mpv-only, no API keys.
 
-- **Anime** — AniList search across FMHY-listed providers (hianime, anikoto, anisuge, kickassanime), direct HLS with subs and auto-skip.
+- **Anime** — AniList search across FMHY-listed providers (hianime, anikoto, anisuge), direct HLS with subs and auto-skip.
 - **YouTube** — Invidious search with yt-dlp fallback.
 - **Music** — yt-dlp search, audio-only player, radio mixes, playlists.
 
@@ -59,8 +59,6 @@ Anime providers backed by the AWC/“clan” family engine (anikoto, anisuge) ar
 2. Verify: `npm run check && npm run audit && npm run smoke -- --offline`.
 
 Standalone providers implement `resolve(media)` and return `{ embedUrl, sources }` per `src/providers/base.js`. The episode/server list parsers are attribute-driven and deliberately tolerate the family's markup drift between mirrors.
-
-KickAssAnime's title index (kaa.lt `/api/anime`) is cached to `~/.config/fahy-cli/kaa-index.json` for 12 hours and refreshed lazily — an empty or stale search resolves again on the next run.
 
 Anime sources still listed on FMHY that are not supported here — animepahe, aniwave, miruro — are Cloudflare-gated or use JS-wall players a headless player can't reach, so they are intentionally omitted rather than shipped as dead links.
 

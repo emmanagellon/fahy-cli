@@ -1,15 +1,14 @@
 import { hianime } from './hianime.js';
 import { anikoto } from './anikoto.js';
 import { anisuge } from './anisuge.js';
-import { kickassanime } from './kickassanime.js';
 import { youtube } from './youtube.js';
 import { ytmusic } from './ytmusic.js';
 import { scoreOf, bestScoredId } from '../store.js';
 
 // Anime adapters are FMHY https://fmhy.net/video sources (hianime, anikoto,
-// anisuge, kickassanime). YouTube is FMHY-listed under Video Streaming;
+// anisuge). YouTube is FMHY-listed under Video Streaming;
 // music rides YouTube via yt-dlp (audio-only mpv).
-export const providers = [hianime, anikoto, anisuge, kickassanime, youtube, ytmusic];
+export const providers = [hianime, anikoto, anisuge, youtube, ytmusic];
 
 export const forKind = (kind) => providers.filter((p) => p.kinds.includes(kind));
 export const getProvider = (id) => providers.find((p) => p.id === id);

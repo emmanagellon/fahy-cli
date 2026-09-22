@@ -1348,7 +1348,7 @@ async function finish(media, provider) {
       }
     }
     // One dead rendition must not sink a provider with several verified ones
-    // (KAA tiers, anikoto servers): play failure hands off to the next source
+    // (dead tiers, anikoto servers): play failure hands off to the next source
     // of the SAME provider, then falls through to the next provider.
     const deduped = [...new Map(alive.map((s) => [s.url, s])).values()];
     const queue = [source, ...deduped.filter((s) => s !== source)];

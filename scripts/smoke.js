@@ -148,7 +148,7 @@ await ok('clan adapters registered', async () => {
     assert.ok(p && p.kinds.includes('anime'), id);
     assert.ok((p.sites || []).length > 0, `${id} sites`);
   }
-  assert.ok(reg.forKind('anime').length >= 4);
+  assert.ok(reg.forKind('anime').length >= 3);
 });
 const AW_EPS_FIX = '<a href="/watch/81553/ep-2" data-ids="81553&amp;eps=2" data-num="2">2</a><a href="/watch/81553/ep-1" data-ids="81553&amp;eps=1" data-num="1">1</a>';
 await ok('parseEpisodeList sorted + ids decoded', () => {
@@ -479,29 +479,29 @@ await ok('shell screen codes (single-page TUI)', async () => {
 const src = await import('../src/sources.js');
 await ok('fmhy parse anime section', () => {
   const html = '<h3 id="anime-streaming">Anime</h3><ul>'
-    + '<li><a href="https://kaa.lt/">KickAssAnime</a>, <a href="https://discord.gg/x">chat</a></li>'
+    + '<li><a href="https://anikototv.to/">Anikoto</a>, <a href="https://discord.gg/x">chat</a></li>'
     + '<li><a href="https://hianime.ad/">HiAnime</a></li></ul>'
     + '<h3 id="cartoon-streaming">Cartoons</h3><a href="https://example.com/">X</a>';
   const r = src.parseFmhyAnimeSection(html);
-  assert.deepEqual(r.map((x) => x.host), ['kaa.lt', 'hianime.ad']);
+  assert.deepEqual(r.map((x) => x.host), ['anikototv.to', 'hianime.ad']);
 });
 await ok('fmhy parse missing section throws', () => {
   assert.throws(() => src.parseFmhyAnimeSection('<html></html>'), /FMHY layout changed/);
 });
 await ok('fmhy parse skips apps subsection (exact id)', () => {
   const html = '<h3 id="anime-streaming-apps">Apps</h3><a href="https://seanime.app/">Seanime</a>'
-    + '<h3 id="anime-streaming">Anime</h3><a href="https://kaa.lt/">KickAssAnime</a>'
+    + '<h3 id="anime-streaming">Anime</h3><a href="https://anikototv.to/">Anikoto</a>'
     + '<h3 id="cartoon-streaming">Cartoons</h3>';
   const r = src.parseFmhyAnimeSection(html);
-  assert.deepEqual(r.map((x) => x.host), ['kaa.lt']);
+  assert.deepEqual(r.map((x) => x.host), ['anikototv.to']);
 });
 await ok('fmhy coverage ok/drift/missing', () => {
   const fmhy = [
-    { name: 'KickAssAnime', url: 'https://kaa.lt/', host: 'kaa.lt' },
+    { name: 'Anikoto', url: 'https://anikototv.to/', host: 'anikototv.to' },
     { name: 'HiAnime', url: 'https://hianime.ad/', host: 'hianime.ad' },
   ];
   const cov = src.matchCoverage(fmhy, [
-    { id: 'kickassanime', name: 'KickAssAnime', sites: ['https://kaa.lt'], tokens: ['kickassanime'] },
+    { id: 'anikoto', name: 'Anikoto', sites: ['https://anikototv.to'], tokens: ['anikoto'] },
     { id: 'hianime', name: 'HiAnime', sites: ['https://hianime.at'], tokens: ['hianime'] },
     { id: 'gone', name: 'Gone', sites: ['https://gone.test'], tokens: ['gone'] },
   ]);
