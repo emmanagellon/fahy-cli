@@ -244,7 +244,12 @@ export const kickassanime = {
     // Segments resolve to st1.* CDN hosts — they 403 without the player's
     // Origin (Referer alone is not enough).
     const origin = `${new URL(server.src).origin}/`;
-    const headers = { Referer: origin, Origin: origin.replace(/\/$/, ''), 'User-Agent': UA };
+    // User-Agent must NOT be forwarded to mpv: hand-delivering a custom UA to
+    // mpv's ffmpeg makes KAA's CDN 403 (duplicate UA) and mpv exits 2 on every
+    // tier. ffmpeg's own UA is enough for playback. The resolver still fetches
+    // master/ladder/segments with a browser UA via fetchHeaders.
+    const headers = { Referer: origin, Origin: origin.replace(/\/$/, '') };
+    const fetchHeaders = { ...headers, 'User-Agent': UA };
 
     // Master + ladder. Every variant URLs a single rendition so mpv never
     // auto-selects a broken one: KAA's CDN intermittently 404s segment files
@@ -254,7 +259,7 @@ export const kickassanime = {
     const t = setTimeout(() => ctrl.abort(), 12000);
     let masterText = null;
     try {
-      const res = await fetch(parsed.manifest, { headers, signal: ctrl.signal });
+      const res = await fetch(parsed.manifest, { headers: fetchHeaders, signal: ctrl.signal });
       if (res.ok) masterText = await res.text();
     } catch (e) {
       if (opts.debug) console.error(`[kickassanime] master: ${e.message}`);
@@ -263,7 +268,7 @@ export const kickassanime = {
     }
     let variants = masterText ? parseLadder(masterText, parsed.manifest) : [];
     if (variants.length > 1) {
-      const headersFor = (url) => ({ ...headers, 'Range': 'bytes=0-0' });
+      const headersFor = (url) => ({ ...fetchHeaders, 'Range': 'bytes=0-0' });
       const probe = async (variant) => {
         try {
           const ac = new AbortController();

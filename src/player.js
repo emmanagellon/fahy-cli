@@ -34,7 +34,13 @@ export function playUrl(url, { headers = null, subFile = null, skip = null, dire
   const hdrs = Array.isArray(headers) ? headers : headers ? [headers] : [];
   for (const h of hdrs) {
     if (typeof h === 'string') args.push(`--http-header-fields=${h}`);
-    else if (h && typeof h === 'object') for (const [k, v] of Object.entries(h)) args.push(`--http-header-fields=${k}: ${v}`);
+    else if (h && typeof h === 'object') for (const [k, v] of Object.entries(h)) {
+      // Custom User-Agent via --http-header-fields 403s some CDNs (KAA's
+      // hls.krussdomi.com rejects the duplicate UA and hard-fails exit 2).
+      // ffmpeg's own UA suffices for playback; keep the rest verbatim.
+      if (/^user-agent$/i.test(k)) continue;
+      args.push(`--http-header-fields=${k}: ${v}`);
+    }
   }
   if (subFile) args.push(`--sub-file=${subFile}`);
   const skipFile = skip ? skipScript(skip) : null;
