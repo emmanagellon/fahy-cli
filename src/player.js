@@ -109,6 +109,30 @@ export function prescreenEmbed(url, { timeoutMs = 12000, debug = false } = {}) {
   return 'unplayable';
 }
 
+// YouTube/music fast-start: pull ONE direct stream URL up front so mpv opens
+// an actual file (--no-ytdl) instead of running its own yt-dlp hook silently
+// for seconds with no picture on screen. null = fall back to the hook — a
+// failed extraction must never block playback.
+export function extractDirectUrl(url, { audioOnly = false, timeoutMs = 20000, debug = false } = {}) {
+  const fmt = audioOnly ? 'bestaudio/best' : 'b[height<=1080]/b';
+  try {
+    const r = spawnSync(
+      'yt-dlp',
+      [...ytDlpPrivacyArgs(), '--no-warnings', '--socket-timeout', '10', '-f', fmt, '--print', '%(url)s', url],
+      { encoding: 'utf8', timeout: timeoutMs, shell: false }
+    );
+    if (r.status !== 0) {
+      if (debug) console.error(`[extract] yt-dlp ${r.status}: ${String(r.stderr || '').split('\n').filter(Boolean).slice(-1)[0]}`);
+      return null;
+    }
+    const direct = String(r.stdout || '').split(/\r?\n/).map((s) => s.trim()).find((s) => /^https?:\/\//i.test(s));
+    return direct || null;
+  } catch (e) {
+    if (debug) console.error(`[extract] ${e.message}`);
+    return null;
+  }
+}
+
 // Offline library playback. Same { code, ms } shape as playUrl, honoring
 // volume / clean / log flags like online playback.
 export function playFile(file, { volume = null, clean = false, logFile = null, debug = false } = {}) {

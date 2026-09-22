@@ -187,34 +187,39 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
   const group = pickGroup(parseServerGroups(svJson.result), audio);
   if (!group) throw new Error(`${label} has no ${audio} servers for "${title}" E${ep.num}`);
   let sources = [];
-  for (const s of group.servers.slice(0, 4)) {
-    try {
-      // The clone family hands the server token straight to /ajax/server?get=
-      // and gets { status, result: { url, skip_data } } back.
-      const srcText = await fetchText(
-        `${mirror}/ajax/server?get=${s.linkId}`,
-        { headers: { 'X-Requested-With': 'XMLHttpRequest' }, userAgent: UA, referer: showRef, timeoutMs: T }
-      );
-      const srcJson = JSON.parse(srcText);
-      const url = srcJson?.result?.url;
-      if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) continue;
-      const seg = (v) => (Array.isArray(v) && v[1] > v[0] && v[0] >= 0 ? { start: v[0], end: v[1] } : undefined);
-      const skip = srcJson.result.skip_data
-        ? { intro: seg(srcJson.result.skip_data.intro), outro: seg(srcJson.result.skip_data.outro) }
-        : null;
-      const clean = skip && (skip.intro || skip.outro) ? { skip } : {};
-      const base = { ...embedSource(url, providerId), quality: `auto ${audio} (sv${s.svId})`, ...clean };
-      const hls = await megaplayToHls(url, { referer: showRef }).catch(() => null);
-      if (hls) {
-        // JS-wall megaplay embed -> direct Referer-locked HLS.
-        sources.push({ ...base, url: hls.url, type: 'hls', direct: true, headers: hls.headers, subFile: hls.subFile });
-      } else {
-        sources.push(base);
+  const resolved = await Promise.all(
+    group.servers.slice(0, 4).map(async (s) => {
+      try {
+        // The clone family hands the server token straight to /ajax/server?get=
+        // and gets { status, result: { url, skip_data } } back. Weapons in
+        // parallel — serial probing made multi-server mirrors take seconds.
+        const srcText = await fetchText(
+          `${mirror}/ajax/server?get=${s.linkId}`,
+          { headers: { 'X-Requested-With': 'XMLHttpRequest' }, userAgent: UA, referer: showRef, timeoutMs: T }
+        );
+        const srcJson = JSON.parse(srcText);
+        const url = srcJson?.result?.url;
+        if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return null;
+        const seg = (v) => (Array.isArray(v) && v[1] > v[0] && v[0] >= 0 ? { start: v[0], end: v[1] } : undefined);
+        const skip = srcJson.result.skip_data
+          ? { intro: seg(srcJson.result.skip_data.intro), outro: seg(srcJson.result.skip_data.outro) }
+          : null;
+        const clean = skip && (skip.intro || skip.outro) ? { skip } : {};
+        const base = { ...embedSource(url, providerId), quality: `auto ${audio} (sv${s.svId})`, ...clean };
+        const hls = await megaplayToHls(url, { referer: showRef }).catch(() => null);
+        if (hls) {
+          // JS-wall megaplay embed -> direct Referer-locked HLS.
+          return { ...base, url: hls.url, type: 'hls', direct: true, headers: hls.headers, subFile: hls.subFile };
+        }
+        // Kept as an embed for the prescreen if megaplay conversion fails.
+        return base;
+      } catch {
+        // One dead server must not kill the lane — the next may be alive.
+        return null;
       }
-    } catch {
-      // One dead server must not kill the lane — the next may be alive.
-    }
-  }
+    })
+  );
+  sources = resolved.filter(Boolean);
   if (!sources.length) throw new Error(`${label} servers all failed for "${title}" E${ep.num}`);
   // Several servers on the same video host share one master (megaplay HLS):
   // collapse identical URLs so the picker isn't full of clones.

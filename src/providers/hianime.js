@@ -197,21 +197,37 @@ async function episodeServers(base, episodeId, opts = {}) {
   return parseServers(raw.html);
 }
 
-// HiAnime mirrors rotate: try each base in order, keep the one that answers.
+// HiAnime mirrors rotate: probe all in parallel, keep the one that answers.
+// Search results are also cached per session (the same keyword resolves
+// again during play), so typing a query then playing an episode is 2 fetches,
+// not 4.
+const searchCache = new Map(); // keyword -> { page, base }
 async function searchMirrors(keyword, opts = {}) {
+  const key = String(keyword || '').trim();
+  const hit = searchCache.get(key);
+  if (hit) return hit;
   let lastErr = null;
-  for (const base of MIRRORS) {
+  const attempts = MIRRORS.map(async (base) => {
     try {
-      const page = await fetchText(`${base}/search?keyword=${encodeURIComponent(keyword).replace(/%20/g, '+')}`, {
-        userAgent: UA, referer: REFERER_FOR(base), timeoutMs: 15000, signal: opts.signal, debug: opts.debug,
+      const page = await fetchText(`${base}/search?keyword=${encodeURIComponent(key).replace(/%20/g, '+')}`, {
+        userAgent: UA, referer: REFERER_FOR(base), timeoutMs: 10000, signal: opts.signal, debug: opts.debug,
       });
       return { page, base };
     } catch (e) {
       lastErr = e;
       if (opts.debug) console.error(`[hianime] ${base}: ${e.message}`);
+      throw e;
     }
+  });
+  let result;
+  try {
+    result = await Promise.any(attempts);
+  } catch {
+    throw lastErr || new Error('HiAnime mirrors unreachable — try --provider anikoto or anisuge.');
   }
-  throw lastErr || new Error('HiAnime mirrors unreachable — try --provider anikoto or anisuge.');
+  if (searchCache.size >= 64) searchCache.clear();
+  searchCache.set(key, result);
+  return result;
 }
 
 export const hianime = {
@@ -253,39 +269,40 @@ export const hianime = {
     const origin = new URL(embedUrl).origin + '/';
     const embedHtml = await fetchText(embedUrl, { userAgent: UA, referer, timeoutMs: 15000, debug: opts.debug });
     const payload = decodeEmbed(embedHtml);
-    // 5. Quality ladder.
-    const ladderHeaders = { 'User-Agent': UA, Referer: origin, Origin: origin.replace(/\/$/, ''), Connection: 'close' };
-    let variants = [];
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 15000);
-      try {
-        const res = await fetch(payload.src, { headers: ladderHeaders, signal: ctrl.signal });
-        if (res.ok) {
-          const text = await res.text();
-          if (/#EXT-X-STREAM-INF/i.test(text)) variants = parseLadder(text, payload.src);
-        }
-      } finally {
-        clearTimeout(t);
-      }
-    } catch (e) {
-      if (opts.debug) console.error(`[hianime] ladder: ${e.message}`);
-    }
-    if (!variants.length) variants = [{ url: payload.src, quality: 'auto', rank: 0 }];
-    variants.sort((a, b) => b.rank - a.rank);
-
+    // 5. Quality ladder + English sub — fetched IN PARALLEL (both derive from
+    // the embed payload, and the sub used to block play-start on a serial tail).
     const headers = { Referer: origin, 'User-Agent': UA };
-    // English soft-sub for mpv. A failed/missing sub is LOUD (silent no-subs
-    // playback confuses everyone) — subMissing surfaces as a printed warning.
-    let subFile = null;
-    let subMissing = false;
-    const sub = pickEnglish(payload.subtitles.map((s) => ({ url: s.src, lang: s.lang, label: s.label })));
-    if (sub) {
-      subFile = await downloadSub(sub.url, `hi-${entry.episodeId}-${mode}.vtt`, { 'User-Agent': UA, Referer: origin });
-      if (!subFile) subMissing = true;
-    } else {
-      subMissing = true;
-    }
+    const [variants, subFile] = await Promise.all([
+      (async () => {
+        const ladderHeaders = { ...headers, Origin: origin.replace(/\/$/, ''), Connection: 'close' };
+        let variants = [];
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 12000);
+          try {
+            const res = await fetch(payload.src, { headers: ladderHeaders, signal: ctrl.signal });
+            if (res.ok) {
+              const text = await res.text();
+              if (/#EXT-X-STREAM-INF/i.test(text)) variants = parseLadder(text, payload.src);
+            }
+          } finally {
+            clearTimeout(t);
+          }
+        } catch (e) {
+          if (opts.debug) console.error(`[hianime] ladder: ${e.message}`);
+        }
+        if (!variants.length) variants = [{ url: payload.src, quality: 'auto', rank: 0 }];
+        return variants.sort((a, b) => b.rank - a.rank);
+      })(),
+      (async () => {
+        // A failed/missing sub is LOUD (silent no-subs playback confuses
+        // everyone) — subMissing surfaces as a printed warning.
+        const sub = pickEnglish(payload.subtitles.map((s) => ({ url: s.src, lang: s.lang, label: s.label })));
+        if (!sub) return null;
+        return downloadSub(sub.url, `hi-${entry.episodeId}-${mode}.vtt`, { 'User-Agent': UA, Referer: origin });
+      })(),
+    ]);
+    const subMissing = !subFile;
     const skip = payload.intro || payload.outro ? { intro: payload.intro, outro: payload.outro } : null;
     const watchUrl = `${base}/watch/${match.id}?ep=${entry.episodeId}`;
     const sources = variants.map((v) => ({

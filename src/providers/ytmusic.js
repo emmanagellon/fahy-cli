@@ -4,7 +4,7 @@
 // ytmusic-player's RD-playlist trick: watch?v={id}&list=RD{id}, flattened.
 // Playback is audio-only mpv (--no-video); the ytdl hook extracts.
 import { ytSearch, ytMix } from '../metadata.js';
-import { parseVideoId } from './youtube.js';
+import { parseVideoId, invSearch, toTrack } from './youtube.js';
 
 export const ytmusic = {
   id: 'ytmusic',
@@ -15,7 +15,13 @@ export const ytmusic = {
   direct: false, // mpv's ytdl hook extracts audio — never pre-extract here
   kinds: ['music'],
   async search(query, opts = {}) {
-    return ytSearch(query, 10, opts).map((t) => ({ ...t, kind: 'music' }));
+    // Invidious first (fast, no yt-dlp spawn); ytsearch fallback like youtube.
+    try {
+      return (await invSearch(query.trim(), opts.debug)).slice(0, 10).map((t) => ({ ...toTrack(t), kind: 'music' }));
+    } catch (e) {
+      if (opts.debug) console.error(`[ytmusic] invidious failed, ytsearch fallback: ${e.message}`);
+      return ytSearch(query, 10, opts).map((t) => ({ ...t, kind: 'music' }));
+    }
   },
   async radio(videoId, limit = 25, opts = {}) {
     return ytMix(videoId, limit, opts).map((t) => ({ ...t, kind: 'music' }));

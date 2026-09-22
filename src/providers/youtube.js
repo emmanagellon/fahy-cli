@@ -26,6 +26,49 @@ const normUrl = (u) => {
   return /^https?:\/\//i.test(t) ? t : `https://${t}`;
 };
 
+async function refreshRegistry(debug) {
+  // Best-effort, in-flight-merged: the caller never waits on this — searching
+  // should hit a live instance NOW, and the healthy registry list lands for
+  // the NEXT query instead of gating this one (cold start used to hang 5s on
+  // the registry fetch alone).
+  if (refreshRegistry.inflight) return refreshRegistry.inflight;
+  const task = (async () => {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      try {
+        const res = await fetch(REGISTRY, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+        if (!res.ok) throw new Error(`registry HTTP ${res.status}`);
+        const j = await res.json();
+        if (!Array.isArray(j)) throw new Error('registry bad shape');
+        const urls = [...new Set(
+          j
+            .map((row) => {
+              const host = Array.isArray(row) ? row[0] : row?.host || row?.url;
+              const meta = Array.isArray(row) ? row[1] : row;
+              return normUrl(meta?.uri?.trim() || host);
+            })
+            .filter((u) => /^https?:\/\//i.test(u) && !/\.(onion|i2p)$/i.test(u) && !/\.ygg$/i.test(u))
+        )];
+        if (urls.length) {
+          cachedPool = urls;
+          cachedAt = Date.now();
+        }
+      } finally {
+        clearTimeout(t);
+      }
+    } catch (e) {
+      if (debug) console.error(`[youtube] registry: ${e.message}`);
+    }
+  })();
+  refreshRegistry.inflight = task;
+  try {
+    return await task;
+  } finally {
+    if (refreshRegistry.inflight === task) refreshRegistry.inflight = null;
+  }
+}
+
 async function pool(debug) {
   const now = Date.now();
   for (const [k, v] of cooldown) if (v <= now) cooldown.delete(k);
@@ -33,70 +76,46 @@ async function pool(debug) {
     const live = cachedPool.filter((u) => (cooldown.get(u) || 0) <= now);
     if (live.length) return live;
   }
-  try {
+  // Kick off the registry refresh without waiting on it, search static now.
+  void refreshRegistry(debug);
+  const fallback = STATIC.filter((u) => (cooldown.get(u) || 0) <= now);
+  if (fallback.length) return fallback;
+  const fresh = cachedPool || STATIC;
+  return fresh.filter((u) => (cooldown.get(u) || 0) <= now).length
+    ? fresh.filter((u) => (cooldown.get(u) || 0) <= now)
+    : fresh;
+}
+
+export async function invSearch(query, debug) {
+  const params = new URLSearchParams({ q: query, type: 'video', sort_by: 'relevance' });
+  const instances = await pool(debug);
+  // Probe up to 4 instances IN PARALLEL (serial probing costs ~2s per dead
+  // instance — the measured 10s cold search). First with videos wins.
+  const probes = instances.slice(0, 6).map(async (inst) => {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
+    const t = setTimeout(() => ctrl.abort(), 10000);
     try {
-      const res = await fetch(REGISTRY, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
-      if (!res.ok) throw new Error(`registry HTTP ${res.status}`);
-      const j = await res.json();
-      if (!Array.isArray(j)) throw new Error('registry bad shape');
-      const urls = [...new Set(
-        j
-          .map((row) => {
-            const host = Array.isArray(row) ? row[0] : row?.host || row?.url;
-            const meta = Array.isArray(row) ? row[1] : row;
-            return normUrl(meta?.uri?.trim() || host);
-          })
-          .filter((u) => /^https?:\/\//i.test(u) && !/\.(onion|i2p)$/i.test(u) && !/\.ygg$/i.test(u))
-      )];
-      if (urls.length) {
-        cachedPool = urls;
-        cachedAt = now;
-        return urls.filter((u) => (cooldown.get(u) || 0) <= now);
-      }
+      const res = await fetch(`${inst}/api/v1/search?${params}`, {
+        headers: { Accept: 'application/json', Connection: 'close' }, signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const items = await res.json();
+      const videos = (Array.isArray(items) ? items : []).filter((v) => v?.type === 'video' && v?.videoId);
+      if (!videos.length) throw new Error('no videos');
+      return videos;
+    } catch (e) {
+      cooldown.set(inst, Date.now() + COOLDOWN_MS);
+      if (debug) console.error(`[youtube] ${inst}: ${e.message}`);
+      throw e;
     } finally {
       clearTimeout(t);
     }
-  } catch (e) {
-    if (debug) console.error(`[youtube] registry: ${e.message}`);
+  });
+  try {
+    return await Promise.any(probes);
+  } catch {
+    throw new Error('No healthy Invidious instances');
   }
-  if (cachedPool?.length) {
-    const live = cachedPool.filter((u) => (cooldown.get(u) || 0) <= now);
-    if (live.length) return live;
-  }
-  return STATIC.filter((u) => (cooldown.get(u) || 0) <= now).length
-    ? STATIC.filter((u) => (cooldown.get(u) || 0) <= now)
-    : STATIC;
-}
-
-async function invSearch(query, debug) {
-  const params = new URLSearchParams({ q: query, type: 'video', sort_by: 'relevance' });
-  const instances = await pool(debug);
-  let lastErr;
-  for (const inst of instances.slice(0, 4)) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 15000);
-      try {
-        const res = await fetch(`${inst}/api/v1/search?${params}`, {
-          headers: { Accept: 'application/json', Connection: 'close' }, signal: ctrl.signal,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const items = await res.json();
-        const videos = (Array.isArray(items) ? items : []).filter((v) => v?.type === 'video' && v?.videoId);
-        if (videos.length) return videos;
-        throw new Error('no videos');
-      } finally {
-        clearTimeout(t);
-      }
-    } catch (e) {
-      lastErr = e;
-      cooldown.set(inst, Date.now() + COOLDOWN_MS);
-      if (debug) console.error(`[youtube] ${inst}: ${e.message}`);
-    }
-  }
-  throw lastErr || new Error('No healthy Invidious instances');
 }
 
 export function toTrack(v) {

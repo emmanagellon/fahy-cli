@@ -14,7 +14,7 @@ import { searchAnime, ytMix, formatDuration } from './metadata.js';
 import { forKind, getProvider, providers, orderProviders, providerTags } from './providers/registry.js';
 
 import { parseVideoId } from './providers/youtube.js';
-import { hasMpv, playUrl, playFile, prescreenEmbed } from './player.js';
+import { hasMpv, playUrl, playFile, prescreenEmbed, extractDirectUrl } from './player.js';
 import { hasYtDlp, downloadSource, guessFile, defaultDownloadDir, defaultMusicDir, freeSpaceBytes } from './downloader.js';
 import {
   getHistory, addHistory, clearHistory, removeHistory, updateHistory, getDownloads, addDownload,
@@ -1460,11 +1460,21 @@ async function playOrDownload(media, provider, source, extra = {}) {
   if (!hasMpv()) {
     throw new Error('mpv not found on PATH and this tool is mpv-only (no browser fallback). Install: winget install --id mpv-player.mpv-CI.MSVC -e');
   }
+  // YouTube/music fast-start: resolve ONE direct stream up front with visible
+  // progress, then mpv opens the file instantly (--no-ytdl). null -> mpv's own
+  // hook as before (age-restricted/extractor quirks fall through untouched).
+  let playSource = source;
+  if ((media.kind === 'youtube' || media.kind === 'music') && !extra.android) {
+    if (useTuiShell) tlog('  Fetching stream…');
+    else console.log(chalk.dim('  Fetching stream…'));
+    const direct = extractDirectUrl(source.url, { audioOnly, debug });
+    if (direct) playSource = { ...source, url: direct, direct: true };
+  }
   // State line: with mpv silenced, music especially looks frozen between
   // "resolving" and sound. This marks the handoff unambiguously.
   // (TUI shell already printed its two-line status above.)
   if (!useTuiShell) console.log(chalk.dim(`  ▶ Playing — q to stop${media.kind === 'music' ? ', audio only' : ''}`));
-  const { code, ms } = await withShellSuspended(() => playUrl(source.url, { headers: source.headers, subFile: source.subFile, skip: source.skip, direct: source.direct === true, audioOnly, volume: config.volume ?? 100, androidClient: extra.android === true, clean: opts.mpvClean, logFile: opts.mpvLog, debug }));
+  const { code, ms } = await withShellSuspended(() => playUrl(playSource.url, { headers: playSource.headers, subFile: playSource.subFile, skip: playSource.skip, direct: playSource.direct === true, audioOnly, volume: config.volume ?? 100, androidClient: extra.android === true, clean: opts.mpvClean, logFile: opts.mpvLog, debug }));
   // mpv exit codes: 0 = played/quit normally. Non-zero within ~2 min means the
   // file never played (bad URL, extractor failed) — keep falling back.
   // (code null = killed externally; long sessions that later error count as played.)
