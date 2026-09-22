@@ -60,6 +60,8 @@ Anime providers backed by the AWC/“clan” family engines (aniwave, anikoto, a
 
 Standalone providers implement `resolve(media)` and return `{ embedUrl, sources }` per `src/providers/base.js`. The episode/server list parsers are attribute-driven and deliberately tolerate the family's markup drift between mirrors.
 
+KickAssAnime's title index (kaa.lt `/api/anime`) is cached to `~/.config/fahy-cli/kaa-index.json` for 12 hours and refreshed lazily — an empty or stale search resolves again on the next run.
+
 ## License
 
 MIT. Streams come from unaffiliated third-party sources — use per local law and each site's terms.
