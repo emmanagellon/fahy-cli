@@ -1349,7 +1349,12 @@ async function finish(media, provider) {
       tlog(`  ${cand.name}: ${c.summary}${reason}`, 'warn');
       failures.push(`${cand.id} (${c.class})`);
       mark(cand.name, false, `${c.summary}${reason}`);
-      recordHealth(cand.id, { ok: false });
+      // Availability gaps (the title/episode simply isn't here), a user
+      // cancel, or being offline are not provider outages — they stay in
+      // the trail but must not degrade provider health or trigger a pin.
+      if (!['provider-empty', 'user-cancelled', 'offline'].includes(c.class)) {
+        recordHealth(cand.id, { ok: false });
+      }
       if (c.policy === 'auto-fallback' && !strict) continue;
       persistTrail();
       throw e;

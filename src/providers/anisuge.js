@@ -10,4 +10,5 @@ export const anisuge = createClanAdapter({
   tokens: ['anisuge'],
   mirrors: ['https://animesuge.cz'],
   label: 'Anisuge',
+  dialect: 'server',
 });

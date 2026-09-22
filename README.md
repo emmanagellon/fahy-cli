@@ -53,9 +53,12 @@ Local data lives in `~/.config/fahy-cli/`. No keys or credentials are stored; th
 
 ## Contribute
 
-1. Copy `src/providers/aniwave.js` → `src/providers/mysite.js` and implement `resolve(media)`.
-2. Register it in `src/providers/registry.js`.
-3. Verify: `npm run check && npm run audit && npm run smoke -- --offline`.
+Anime providers backed by the AWC/“clan” family engines (aniwave, anikoto, anisuge) are one `createClanAdapter` call — add a mirror and pick the sources dialect (`'ajax'` for `aniwaves.ru`, `'server'` for the anikoto/anisuge clone family) in `src/providers/clan.js`:
+
+1. Register the adapter in `src/providers/registry.js`.
+2. Verify: `npm run check && npm run audit && npm run smoke -- --offline`.
+
+Standalone providers implement `resolve(media)` and return `{ embedUrl, sources }` per `src/providers/base.js`. The episode/server list parsers are attribute-driven and deliberately tolerate the family's markup drift between mirrors.
 
 ## License
 

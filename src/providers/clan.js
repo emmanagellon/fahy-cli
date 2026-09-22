@@ -55,34 +55,42 @@ export function chooseShow(links, query) {
   );
 }
 
-// Episode list HTML -> [{ num, href, ids }] (ids = 'data-ids', e.g. '81553&eps=1').
+// Episode list HTML -> [{ num, href, ids }].
+// Three live dialects: aniwaves links carry /ep-N hrefs with data-num; the
+// anikoto/anisuge clone family uses href="#" where the episode number rides
+// on data-num (anikoto) or data-slug (anisuge), and ids on data-ids alone.
 export function parseEpisodeList(html) {
   const out = [];
   for (const m of String(html || '').matchAll(/<a\b([^>]*)>/gi)) {
     const attrs = m[1] || '';
     const href = /(?:^|\s)href\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1];
-    if (!href || !/\/ep-\d+/i.test(href)) continue;
-    const num = parseInt(/(?:^|\s)data-num\s*=\s*["'](\d+)["']/i.exec(attrs)?.[1] || '', 10);
+    if (!href) continue;
+    const num = parseInt(
+      /(?:^|\s)data-num\s*=\s*["'](\d+)["']/i.exec(attrs)?.[1] ||
+      /(?:^|\s)data-slug\s*=\s*["'](\d+)["']/i.exec(attrs)?.[1] || '', 10);
     const ids = /(?:^|\s)data-ids\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]?.replace(/&amp;/g, '&');
     if (!Number.isInteger(num) || num <= 0 || !ids) continue;
-    out.push({ num, href, ids });
+    if (!/\/ep-\d+/i.test(href) && !/^#?$/i.test(href)) continue;
+    out.push({ num, href: /^#?$/i.test(href) ? null : href, ids });
   }
   return out.sort((a, b) => a.num - b.num);
 }
 
 // Server list HTML -> [{ type: 'sub'|'dub'|..., servers: [{ svId, linkId }] }].
+// Attribute-driven, tolerant of the family's markup drift: groups are any
+// element with data-type; servers are data-sv-id + data-link-id (svId may be
+// numeric on some mirrors, hexadecimal on animesuge).
 export function parseServerGroups(html) {
+  const text = String(html || '');
   const groups = [];
-  for (const sec of String(html || '').split('<div class="type"').slice(1)) {
-    const type = /data-type="(\w+)"/i.exec(sec)?.[1]?.toLowerCase();
-    if (!type) continue;
-    const servers = [];
-    for (const m of sec.matchAll(/data-sv-id="(\d+)"\s+data-link-id="([^"]+)"/gi)) {
-      servers.push({ svId: m[1], linkId: m[2] });
-    }
-    if (servers.length) groups.push({ type, servers });
+  for (const g of text.matchAll(/data-type\s*=\s*["'](\w+)["']/gi)) {
+    groups.push({ type: g[1].toLowerCase(), at: g.index, servers: [] });
   }
-  return groups;
+  for (const m of text.matchAll(/data-sv-id\s*=\s*["']([^"']+)["']\s+data-link-id\s*=\s*["']([^"']+)["']/gi)) {
+    const owner = [...groups].filter((g) => g.at < m.index).sort((a, b) => b.at - a.at)[0];
+    if (owner) owner.servers.push({ svId: m[1], linkId: m[2] });
+  }
+  return groups.filter((g) => g.servers.length).map(({ type, servers }) => ({ type, servers }));
 }
 
 function pickGroup(groups, audio) {
@@ -99,7 +107,7 @@ async function postForm(url, form, referer, timeoutMs = T) {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'User-Agent': UA, Referer: referer, 'Content-Type': 'application/x-www-form-urlencoded', Connection: 'close' },
+      headers: { 'User-Agent': UA, Referer: referer, 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', Connection: 'close' },
       body: new URLSearchParams(form).toString(),
       signal: ctrl.signal,
     });
@@ -119,7 +127,7 @@ function absUrl(mirror, href) {
 }
 
 async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
-  const { label, providerId } = cfg;
+  const { label, providerId, dialect = 'ajax' } = cfg;
   const ref = (p) => `${mirror}${p.startsWith('/') ? p : `/${p}`}`;
   // 1. Filter -> best show match.
   const filter = await fetchText(`${mirror}/filter?keyword=${encodeURIComponent(title)}`, {
@@ -153,8 +161,14 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
   const sources = [];
   for (const s of group.servers.slice(0, 4)) {
     try {
+      // Two dialects: 'ajax' (aniwaves) powders the server id through
+      // /ajax/sources?id=..&asi=0&autoPlay=0; 'server' (anikoto/anisuge)
+      // hands the token itself to /ajax/server?get=<token>. Both resolve to
+      // { status, result: { url, skip_data } }.
       const srcText = await fetchText(
-        `${mirror}/ajax/sources?id=${s.linkId}&asi=0&autoPlay=0`,
+        dialect === 'server'
+          ? `${mirror}/ajax/server?get=${s.linkId}`
+          : `${mirror}/ajax/sources?id=${s.linkId}&asi=0&autoPlay=0`,
         { headers: { 'X-Requested-With': 'XMLHttpRequest' }, userAgent: UA, referer: showRef, timeoutMs: T }
       );
       const srcJson = JSON.parse(srcText);
@@ -171,10 +185,12 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
     }
   }
   if (!sources.length) throw new Error(`${label} servers all failed for "${title}" E${ep.num}`);
-  return { embedUrl: absUrl(mirror, ep.href), sources };
+  // The '#' dialect has no per-episode href — rebuild it from the show path.
+  const watchRef = ep.href || `${(show.path || `/watch/${show.slug}`).replace(/\/ep-\d+$/i, '')}/ep-${ep.num}`;
+  return { embedUrl: absUrl(mirror, watchRef), sources };
 }
 
-export function createClanAdapter({ id, name, site, sites, tokens, mirrors, label }) {
+export function createClanAdapter({ id, name, site, sites, tokens, mirrors, label, dialect }) {
   return {
     id,
     name,
@@ -191,7 +207,7 @@ export function createClanAdapter({ id, name, site, sites, tokens, mirrors, labe
       let firstErr = null;
       for (const mirror of mirrors) {
         try {
-          return await resolveOnMirror(mirror, { label, providerId: id }, { title, epNum, audio });
+          return await resolveOnMirror(mirror, { label, providerId: id, dialect }, { title, epNum, audio });
         } catch (e) {
           // First error wins: a later mirror's misleading error must not
           // mask the real failure.

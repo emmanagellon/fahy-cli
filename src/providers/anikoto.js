@@ -11,4 +11,5 @@ export const anikoto = createClanAdapter({
   tokens: ['anikoto'],
   mirrors: ['https://anikototv.to'],
   label: 'Anikoto',
+  dialect: 'server',
 });
