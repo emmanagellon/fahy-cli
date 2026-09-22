@@ -62,6 +62,8 @@ Standalone providers implement `resolve(media)` and return `{ embedUrl, sources 
 
 KickAssAnime's title index (kaa.lt `/api/anime`) is cached to `~/.config/fahy-cli/kaa-index.json` for 12 hours and refreshed lazily — an empty or stale search resolves again on the next run.
 
+Provider status today: **playable via CLI** — hianime, anikoto, anisuge, kickassanime (direct HLS with subs; federation auto-skips them before trying gated ones). **Browser-gated** — animepahe (Cloudflare on `/api`), miruro (Cloudflare challenge on every mirror and its base64url/gzip pipe API), aniwave (obfuscated echovideo player embed). These three fail fast with a clear message; a real browser or a curl-impersonate install is required to reach them.
+
 ## License
 
 MIT. Streams come from unaffiliated third-party sources — use per local law and each site's terms.
