@@ -134,6 +134,22 @@ await ok('parseFilterLinks + chooseShow exact', () => {
   assert.equal(l.length, 2);
   assert.equal(aw.chooseShow(l, 'ONE PIECE').slug, 'one-piece-81553');
 });
+await ok('parseFilterLinks data-tip id (anikoto shape)', () => {
+  const html = '<div class="ani poster tip" data-tip="769"><a href="https://anikototv.to/watch/one-piece-special-abc12/ep-1">';
+  const l = aw.parseFilterLinks(html);
+  assert.equal(l.length, 1);
+  assert.equal(l[0].id, '769');
+  assert.ok(l[0].title.includes('one piece'));
+});
+await ok('clan adapters registered', async () => {
+  const reg = await import('../src/providers/registry.js');
+  for (const id of ['anikoto', 'anisuge']) {
+    const p = reg.getProvider(id);
+    assert.ok(p && p.kinds.includes('anime'), id);
+    assert.ok((p.sites || []).length > 0, `${id} sites`);
+  }
+  assert.ok(reg.forKind('anime').length >= 7);
+});
 const AW_EPS_FIX = '<a href="/watch/81553/ep-2" data-ids="81553&amp;eps=2" data-num="2">2</a><a href="/watch/81553/ep-1" data-ids="81553&amp;eps=1" data-num="1">1</a>';
 await ok('parseEpisodeList sorted + ids decoded', () => {
   const e = aw.parseEpisodeList(AW_EPS_FIX);

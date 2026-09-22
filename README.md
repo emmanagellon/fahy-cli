@@ -2,7 +2,7 @@
 free anime heck yea!
 Anime, YouTube, and music in your terminal.
 
-- **Anime** — AniList search + FMHY-listed sources (`hianime`, `animepahe`, `miruro`, `aniwave`, `kickassanime`), direct HLS with subs and auto-skip where available.
+- **Anime** — AniList search + FMHY-listed sources (`hianime`, `animepahe`, `miruro`, `aniwave`, `anikoto`, `anisuge`, `kickassanime`), direct HLS with subs and auto-skip where available.
 - **YouTube** — Invidious-pool search with yt-dlp fallback, played in mpv.
 - **Music** — yt-dlp search, audio-only mpv daemon, radio mixes, playlists.
 
