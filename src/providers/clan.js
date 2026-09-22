@@ -1,4 +1,4 @@
-import { embedSource } from './base.js';
+import { embedSource, fetchJson } from './base.js';
 import { fetchText } from '../net.js';
 
 // Shared engine for the AniWave-clone family (aniwaves.ru, anikototv.to,
@@ -126,6 +126,35 @@ function absUrl(mirror, href) {
   }
 }
 
+// megaplay.buzz embeds (the anikoto/anisuge video hosts) are JS-wall players:
+// the page itself is unplayable by yt-dlp. Their stream API
+// (stream/getSources?id=<realid>) exposes the CDN path via subtitle tracks, and
+// the HLS master lives one level up as master.m3u8. The CDN is Referer-locked
+// (no header -> 403), so the converted source carries headers and is marked
+// direct so mpv opens the m3u8 natively with --http-header-fields (yt-dlp
+// can't attach our headers). Non-megaplay embeds return null untouched.
+async function megaplayToHls(embedUrl, { userAgent = UA, referer, timeoutMs = T } = {}) {
+  const m = /\/stream\/s-\d+\/([^/]+)\/(?:sub|dub)\/?/i.exec(embedUrl);
+  if (!m || !/^https:\/\//i.test(embedUrl)) return null;
+  const origin = new URL(embedUrl).origin;
+  const json = await fetchJson(`${origin}/stream/getSources?id=${encodeURIComponent(m[1])}`, {
+    headers: { 'User-Agent': userAgent, Accept: 'application/json, */*', 'X-Requested-With': 'XMLHttpRequest', Referer: referer || embedUrl },
+    timeoutMs,
+  });
+  const tracks = Array.isArray(json?.tracks) ? json.tracks : [];
+  const direct = Array.isArray(json?.sources) ? json.sources : [];
+  const sub = (tracks.find((t) => /\.(vtt|srt)(?:\?|$)/i.test(t.file)) || tracks[0])?.file;
+  let m3u8 = null;
+  if (sub) {
+    m3u8 = /\/subtitles\/[^/]+(?:\?|$)/i.test(sub)
+      ? sub.replace(/\/subtitles\/[^/]+(?:\?.*)?$/i, '') + '/master.m3u8'
+      : new URL('../master.m3u8', sub).href;
+  }
+  if (!m3u8) m3u8 = direct.find((sc) => /\.m3u8/i.test(sc.file))?.file || null;
+  if (!m3u8) return null;
+  return { url: m3u8, headers: { Referer: `${origin}/` }, subFile: sub || null };
+}
+
 async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
   const { label, providerId, dialect = 'ajax' } = cfg;
   const ref = (p) => `${mirror}${p.startsWith('/') ? p : `/${p}`}`;
@@ -179,7 +208,14 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
         ? { intro: seg(srcJson.result.skip_data.intro), outro: seg(srcJson.result.skip_data.outro) }
         : null;
       const clean = skip && (skip.intro || skip.outro) ? { skip } : {};
-      sources.push({ ...embedSource(url, providerId), quality: `auto ${audio} (sv${s.svId})`, ...clean });
+      const base = { ...embedSource(url, providerId), quality: `auto ${audio} (sv${s.svId})`, ...clean };
+      const hls = await megaplayToHls(url, { referer: showRef }).catch(() => null);
+      if (hls) {
+        // JS-wall megaplay embed -> direct Referer-locked HLS.
+        sources.push({ ...base, url: hls.url, type: 'hls', direct: true, headers: hls.headers, subFile: hls.subFile });
+      } else {
+        sources.push(base);
+      }
     } catch {
       // One dead server must not kill the lane — the next may be alive.
     }
