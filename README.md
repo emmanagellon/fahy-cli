@@ -2,9 +2,11 @@
 
 Anime, YouTube, and music in your terminal. mpv-only, no API keys.
 
-- **Anime** — AniList search across FMHY-listed providers (hianime, anikoto, anisuge), direct HLS with subs and auto-skip.
+## Features
+
+- **Anime** — AniList search across FMHY sources (hianime, anikoto, anisuge). Direct HLS with soft subtitles and intro/outro auto-skip.
 - **YouTube** — Invidious search with yt-dlp fallback.
-- **Music** — yt-dlp search, audio-only player, radio mixes, playlists.
+- **Music** — Search, audio-only playback, radio mixes, and playlists via yt-dlp.
 
 ## Install
 
@@ -16,51 +18,46 @@ irm https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.ps1 | i
 curl -fsSL https://raw.githubusercontent.com/emmanagellon/fahy-cli/main/install.sh | bash
 ```
 
-Scripts install Node.js 18+, mpv, and yt-dlp if missing, then `fahy --doctor` to verify. Alternatives: `npm install -g fahy-cli`, or clone + `npm link`. Remove with `fahy uninstall` (`--purge` also deletes local data).
+Installs Node.js 18+, mpv, and yt-dlp when missing, then runs `fahy --doctor` to verify. Alternatives: `npm install -g fahy-cli`, or clone and `npm link`. Uninstall with `fahy uninstall` (`--purge` also deletes local data).
 
-## Update
+## Usage
 
-```
-fahy upgrade                # update to the latest
-fahy --doctor               # shows installed vs latest
-fahy --auto-update          # show the update policy
-fahy --auto-update install  # apply updates automatically
-fahy --auto-update off      # never check automatically
-```
-
-fahy checks GitHub once a day and prompts when a newer version is out (`notice`, the default) — or applies it in place with `--auto-update install`.
-
-## Use
-
-```powershell
-fahy                      # fullscreen shell: type to search, TAB switches mode
-fahy -a -S "Frieren" --episode 3
-fahy -y -S "lofi beats"
-fahy -m -S "bohemian rhapsody"
-fahy --offline            # play completed downloads
-fahy --continue           # resume last session
-fahy --doctor             # environment health
-fahy --help               # all flags
+```text
+fahy                          # shell: type to search, TAB switches mode
+fahy -a -S "Frieren" --episode 3    # anime
+fahy -y -S "lofi beats"             # youtube
+fahy -m -S "bohemian rhapsody"      # music
+fahy --offline                 # play completed downloads
+fahy --continue                # resume last session
+fahy --doctor                  # environment health
+fahy --help                    # all flags
 ```
 
-Keys: `↑↓` navigate, `ENTER` select, `ESC` back, `?` help, `s` new search. In mpv: `space` pause, `←/→` seek, `q` quit.
+| Shell        | mpv               |
+| ------------ | ----------------- |
+| `↑↓` navigate | `space` pause    |
+| `enter` select | `←/→` seek       |
+| `esc` back   | `q` quit          |
+| `?` help     |                   |
+| `s` search   |                   |
 
-Playback auto-falls back across providers, scoring them by observed reliability and speed (`--provider-health`, `--set-priority`, `--no-fallback`).
+Playback auto-falls back across providers, ranked by observed reliability and speed. Override with `--set-default-provider`, `--set-priority`, `--provider-health`, or disable fallback with `--no-fallback`.
 
 ## Data
 
-Local data lives in `~/.config/fahy-cli/`. No keys or credentials are stored; the optional `YTMUSIC_PROXY` env var is never written to disk. mpv and yt-dlp run tracking-free (`--no-cache-dir`, `--no-cookies`, `--ignore-config`).
+Local data lives in `~/.config/fahy-cli/`. No keys or credentials are stored; the optional `YTMUSIC_PROXY` env var is never persisted. mpv and yt-dlp run tracking-free (`--no-config`, `--no-cookies`, `--ignore-config`, `--no-cache-dir`).
 
-## Contribute
+## Contributing
 
-Anime providers backed by the AWC/“clan” family engine (anikoto, anisuge) are one `createClanAdapter` call — add a mirror in `src/providers/clan.js`:
+```text
+npm run check
+npm run audit
+npm run smoke -- --offline
+```
 
-1. Register the adapter in `src/providers/registry.js`.
-2. Verify: `npm run check && npm run audit && npm run smoke -- --offline`.
+Anime providers backed by the clan engine (anikoto, anisuge) are one `createClanAdapter` call in `src/providers/clan.js`; standalone providers return `{ embedUrl, sources }` per `src/providers/base.js`. Register either in `src/providers/registry.js`.
 
-Standalone providers implement `resolve(media)` and return `{ embedUrl, sources }` per `src/providers/base.js`. The episode/server list parsers are attribute-driven and deliberately tolerate the family's markup drift between mirrors.
-
-Anime sources still listed on FMHY that are not supported here — animepahe, aniwave, miruro — are Cloudflare-gated or use JS-wall players a headless player can't reach, so they are intentionally omitted rather than shipped as dead links.
+FMHY anime sources that are behind Cloudflare or JS-wall players (animepahe, aniwave, miruro) are intentionally omitted rather than shipped as dead links.
 
 ## License
 
