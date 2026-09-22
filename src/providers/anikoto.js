@@ -1,7 +1,7 @@
 import { createClanAdapter } from './clan.js';
 
-// Anikoto (FMHY-listed: anikototv.to) — same ajax dialect as aniwaves.ru
-// (filter -> episode list -> server list -> sources), shared engine.
+// Anikoto (FMHY-listed: anikototv.to) — shared clan engine
+// (filter -> episode list -> server list -> sources, with megaplay HLS.
 // Show ids ride on the poster's data-tip (slugs end in a hash, not a number).
 export const anikoto = createClanAdapter({
   id: 'anikoto',
@@ -11,5 +11,4 @@ export const anikoto = createClanAdapter({
   tokens: ['anikoto'],
   mirrors: ['https://anikototv.to'],
   label: 'Anikoto',
-  dialect: 'server',
 });

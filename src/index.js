@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { searchAnime, ytMix, formatDuration } from './metadata.js';
 import { forKind, getProvider, providers, orderProviders, providerTags } from './providers/registry.js';
-import { animepahe } from './providers/animepahe.js';
+
 import { parseVideoId } from './providers/youtube.js';
 import { hasMpv, playUrl, playFile, prescreenEmbed } from './player.js';
 import { hasYtDlp, downloadSource, guessFile, defaultDownloadDir, defaultMusicDir, freeSpaceBytes } from './downloader.js';
@@ -77,7 +77,7 @@ program
   .option('--library', 'alias for --offline')
   .option('--list-providers', 'list all provider adapters')
   .option('--set-default-provider <kind=id>', 'e.g. --set-default-provider anime=hianime', collect, [])
-  .option('--set-priority <kind=id1,id2>', 'e.g. --set-priority anime=hianime,miruro (fallback order)')
+  .option('--set-priority <kind=id1,id2>', 'e.g. --set-priority anime=hianime,anikoto (fallback order)')
   .option('--provider-health', 'show per-provider health memory')
   .option('--reset-health [id]', 'forget health memory (one provider, or all)')
   .option('--upgrade [version]', 'upgrade fahy (latest, or pin: --upgrade 0.6.2)')
@@ -252,7 +252,7 @@ if (opts.setDefaultProvider?.length) {
   process.exit(0);
 }
 if (opts.setPriority) {
-  // Accept "anime=hianime,miruro" (quote it in PowerShell — bare commas split
+  // Accept "anime=hianime,anikoto" (quote it in PowerShell — bare commas split
   // into separate args there) and tolerate the split form too.
   const raw = Array.isArray(opts.setPriority) ? opts.setPriority.join(' ') : String(opts.setPriority);
   const stray = (program.args || []).map(String).join(' ');
@@ -260,7 +260,7 @@ if (opts.setPriority) {
   const k = raw.slice(0, eq);
   const list = (raw.slice(eq + 1) + ' ' + stray).split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
   if (!['anime', 'youtube', 'music'].includes(k) || !list.length || list.some((id) => !getProvider(id)?.kinds.includes(k))) {
-    console.error(chalk.red(`Bad value: ${raw}. Use kind=id1,id2, e.g. "anime=hianime,miruro"`));
+    console.error(chalk.red(`Bad value: ${raw}. Use kind=id1,id2, e.g. "anime=hianime,anikoto"`));
     process.exit(1);
   }
   saveConfig({ ...config, providerPriority: { ...(config.providerPriority || {}), [k]: list } });
@@ -756,77 +756,6 @@ async function pickProvider(media) {
 async function resolveMedia(provider, media) {
   const spin = startSpin(`Resolving ${provider.name}…`);
   try {
-    // AnimePahe needs its own entry (AniList/TUI results don't carry one):
-    // search AnimePahe by title, match the episode, then resolve the play URL.
-    if (provider.id === 'animepahe' && media.kind === 'anime') {
-      // media.providerId doubles as the AnimePahe numeric entry id — but
-      // history entries store the PROVIDER id string here ('animepahe', ...),
-      // which must fall through to title search, not the episodes API.
-      const numericEntryId = /^\d+$/.test(String(media.providerId || '')) ? media : null;
-      let entry = numericEntryId;
-      if (!entry) {
-        let hits;
-        try {
-          hits = await animepahe.search(media.title);
-        } catch {
-          throw new Error(`AnimePahe is unreachable from your network (blocked/timeout) — try --provider hianime or miruro.`);
-        }
-        if (!hits.length) throw new Error(`AnimePahe has no entry for "${media.title}" — try --provider hianime or miruro.`);
-        if (hits.length > 1 && interactive) {
-          spin.stop();
-          const matchOpts = hits.slice(0, 5).map((h, i) => ({ value: i, label: `${h.title} (${h.year || '?'})`, hint: `${h.episodes || '?'} eps` }));
-          if (shellActive()) {
-            const v = await shellMenu(`AnimePahe match for "${media.title}"`, matchOpts);
-            if (v == null) throw new Error('cancelled');
-            entry = hits[Number(v)];
-          } else {
-            const pick = await p.select({
-              message: `AnimePahe match for "${media.title}":`,
-              options: matchOpts,
-            });
-            if (p.isCancel(pick)) throw new Error('cancelled');
-            entry = hits[Number(pick)];
-          }
-          spin.start();
-        } else {
-          entry = hits[0];
-        }
-        media.providerId = entry.providerId;
-      }
-      media.anime = { session: entry.session, url: entry.url, title: entry.title || media.title };
-      let eps;
-      try {
-        eps = await animepahe.episodes({ providerId: entry.providerId || media.providerId });
-      } catch {
-        throw new Error(`AnimePahe is unreachable from your network (blocked/timeout) — try --provider hianime or miruro.`);
-      }
-      let ref = eps.find((x) => x.number === Number(media.episode));
-      if (!ref && interactive) {
-        spin.stop();
-        const epOpts = eps.slice(0, 200).map((x) => ({ value: x.number, label: `Episode ${x.number}` }));
-        if (shellActive()) {
-          const v = await shellMenu(`Episode (${eps.length})`, epOpts);
-          if (v != null) ref = eps.find((x) => x.number === Number(v));
-        } else {
-          const pick = await p.select({
-            message: `Episode (${eps.length}):`,
-            options: epOpts,
-          });
-          if (!p.isCancel(pick)) ref = eps.find((x) => x.number === Number(pick));
-        }
-        spin.start();
-      }
-      if (!ref) ref = eps[0];
-      if (!ref) throw new Error(`AnimePahe lists no episodes for "${media.title}".`);
-      media.episode = ref.number;
-      media.episodeRef = ref;
-      const out = await provider.resolve(
-        { title: media.title, anime: media.anime, episode: ref },
-        { debug, audio: opts.dub ? 'dub' : 'sub' }
-      );
-      spin.stop();
-      return out;
-    }
     if (media.kind === 'anime' && !media.anime) media.anime = { ...media };
     // NOTE: no trailing ...media spread — it used to overwrite episode {number}
     // with the plain episode number and produced `undefined` URLs.

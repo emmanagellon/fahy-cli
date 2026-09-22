@@ -2,7 +2,7 @@
 
 Anime, YouTube, and music in your terminal. mpv-only, no API keys.
 
-- **Anime** — AniList search across FMHY-listed providers (hianime, animepahe, miruro, aniwave, anikoto, anisuge, kickassanime), direct HLS with subs and auto-skip.
+- **Anime** — AniList search across FMHY-listed providers (hianime, anikoto, anisuge, kickassanime), direct HLS with subs and auto-skip.
 - **YouTube** — Invidious search with yt-dlp fallback.
 - **Music** — yt-dlp search, audio-only player, radio mixes, playlists.
 
@@ -53,7 +53,7 @@ Local data lives in `~/.config/fahy-cli/`. No keys or credentials are stored; th
 
 ## Contribute
 
-Anime providers backed by the AWC/“clan” family engines (aniwave, anikoto, anisuge) are one `createClanAdapter` call — add a mirror and pick the sources dialect (`'ajax'` for `aniwaves.ru`, `'server'` for the anikoto/anisuge clone family) in `src/providers/clan.js`:
+Anime providers backed by the AWC/“clan” family engine (anikoto, anisuge) are one `createClanAdapter` call — add a mirror in `src/providers/clan.js`:
 
 1. Register the adapter in `src/providers/registry.js`.
 2. Verify: `npm run check && npm run audit && npm run smoke -- --offline`.
@@ -62,7 +62,7 @@ Standalone providers implement `resolve(media)` and return `{ embedUrl, sources 
 
 KickAssAnime's title index (kaa.lt `/api/anime`) is cached to `~/.config/fahy-cli/kaa-index.json` for 12 hours and refreshed lazily — an empty or stale search resolves again on the next run.
 
-Provider status today: **playable via CLI** — hianime, anikoto, anisuge, kickassanime (direct HLS with subs; federation auto-skips them before trying gated ones). **Browser-gated** — animepahe (Cloudflare on `/api`), miruro (Cloudflare challenge on every mirror and its base64url/gzip pipe API), aniwave (obfuscated echovideo player embed). These three fail fast with a clear message; a real browser or a curl-impersonate install is required to reach them.
+Anime sources still listed on FMHY that are not supported here — animepahe, aniwave, miruro — are Cloudflare-gated or use JS-wall players a headless player can't reach, so they are intentionally omitted rather than shipped as dead links.
 
 ## License
 

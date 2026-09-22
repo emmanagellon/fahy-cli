@@ -121,7 +121,7 @@ await ok('embedSource shape', () => {
   assert.equal(s.provider, 'p');
 });
 
-const aw = await import('../src/providers/aniwave.js');
+const aw = await import('../src/providers/clan.js');
 await ok('parseWatchSlug', () => {
   const p = aw.parseWatchSlug('/watch/one-piece-81553');
   assert.equal(p.id, '81553');
@@ -148,7 +148,7 @@ await ok('clan adapters registered', async () => {
     assert.ok(p && p.kinds.includes('anime'), id);
     assert.ok((p.sites || []).length > 0, `${id} sites`);
   }
-  assert.ok(reg.forKind('anime').length >= 7);
+  assert.ok(reg.forKind('anime').length >= 4);
 });
 const AW_EPS_FIX = '<a href="/watch/81553/ep-2" data-ids="81553&amp;eps=2" data-num="2">2</a><a href="/watch/81553/ep-1" data-ids="81553&amp;eps=1" data-num="1">1</a>';
 await ok('parseEpisodeList sorted + ids decoded', () => {
@@ -243,10 +243,10 @@ await ok('scoreOf neutral/ranked/streak-penalized', () => {
   assert.equal(store.scoreOf({ ok: 5, fail: 0, consecFail: 0, lastMs: null }).ms, null);
 });
 await ok('shouldAutoPin only on unhealthy default', () => {
-  assert.equal(store.shouldAutoPin('aniwave', 'hianime', true), true);
+  assert.equal(store.shouldAutoPin('anikoto', 'hianime', true), true);
   assert.equal(store.shouldAutoPin('hianime', 'hianime', true), false); // same: no churn
-  assert.equal(store.shouldAutoPin('aniwave', 'hianime', false), false); // default works: no churn
-  assert.equal(store.shouldAutoPin('aniwave', undefined, true), false);
+  assert.equal(store.shouldAutoPin('anikoto', 'hianime', false), false); // default works: no churn
+  assert.equal(store.shouldAutoPin('anikoto', undefined, true), false);
 });
 await ok('orderProviders auto-ranks by score', async () => {
   const { orderProviders } = await import('../src/providers/registry.js');
@@ -479,29 +479,29 @@ await ok('shell screen codes (single-page TUI)', async () => {
 const src = await import('../src/sources.js');
 await ok('fmhy parse anime section', () => {
   const html = '<h3 id="anime-streaming">Anime</h3><ul>'
-    + '<li><a href="https://www.miruro.com/">Miruro</a>, <a href="https://discord.gg/x">chat</a></li>'
+    + '<li><a href="https://kaa.lt/">KickAssAnime</a>, <a href="https://discord.gg/x">chat</a></li>'
     + '<li><a href="https://hianime.ad/">HiAnime</a></li></ul>'
     + '<h3 id="cartoon-streaming">Cartoons</h3><a href="https://example.com/">X</a>';
   const r = src.parseFmhyAnimeSection(html);
-  assert.deepEqual(r.map((x) => x.host), ['miruro.com', 'hianime.ad']);
+  assert.deepEqual(r.map((x) => x.host), ['kaa.lt', 'hianime.ad']);
 });
 await ok('fmhy parse missing section throws', () => {
   assert.throws(() => src.parseFmhyAnimeSection('<html></html>'), /FMHY layout changed/);
 });
 await ok('fmhy parse skips apps subsection (exact id)', () => {
   const html = '<h3 id="anime-streaming-apps">Apps</h3><a href="https://seanime.app/">Seanime</a>'
-    + '<h3 id="anime-streaming">Anime</h3><a href="https://www.miruro.com/">Miruro</a>'
+    + '<h3 id="anime-streaming">Anime</h3><a href="https://kaa.lt/">KickAssAnime</a>'
     + '<h3 id="cartoon-streaming">Cartoons</h3>';
   const r = src.parseFmhyAnimeSection(html);
-  assert.deepEqual(r.map((x) => x.host), ['miruro.com']);
+  assert.deepEqual(r.map((x) => x.host), ['kaa.lt']);
 });
 await ok('fmhy coverage ok/drift/missing', () => {
   const fmhy = [
-    { name: 'Miruro', url: 'https://www.miruro.com/', host: 'miruro.com' },
+    { name: 'KickAssAnime', url: 'https://kaa.lt/', host: 'kaa.lt' },
     { name: 'HiAnime', url: 'https://hianime.ad/', host: 'hianime.ad' },
   ];
   const cov = src.matchCoverage(fmhy, [
-    { id: 'miruro', name: 'Miruro', sites: ['https://www.miruro.com'], tokens: ['miruro'] },
+    { id: 'kickassanime', name: 'KickAssAnime', sites: ['https://kaa.lt'], tokens: ['kickassanime'] },
     { id: 'hianime', name: 'HiAnime', sites: ['https://hianime.at'], tokens: ['hianime'] },
     { id: 'gone', name: 'Gone', sites: ['https://gone.test'], tokens: ['gone'] },
   ]);

@@ -1,14 +1,14 @@
 import { embedSource, fetchJson } from './base.js';
 import { fetchText } from '../net.js';
 
-// Shared engine for the AniWave-clone family (aniwaves.ru, anikototv.to,
-// animesuge.cz — same ajax dialect, verified per site):
-//   filter page -> /watch/ (or /anime/) match -> ajax/episode/list/{id}
-//   -> episode ids -> ajax/server/list -> ajax/sources
-// yields per-server embed URLs. Show ids come from the numeric slug tail
-// (aniwaves) or the poster's data-tip (anikoto/anisuge). Dead video hosts
-// (404/gone, they rot fast) are filtered by the prescreen downstream;
-// every live server is offered. Sub by default, dub when asked.
+// Shared engine for the AniWave-clone family (anikototv.to, animesuge.cz —
+// same filter/playback flow, verified per site):
+//   filter page -> /watch/ match -> ajax/episode/list/{id} -> episode ids
+//   -> ajax/server/list -> ajax/server?get=<token>
+// yields per-server embed URLs. Show ids come from the poster's data-tip
+// (slugs end in a hash, not a number). Dead video hosts (404/gone, they rot
+// fast) are filtered by the prescreen downstream; every live server is
+// offered. Sub by default, dub when asked.
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const T = 12000;
 
@@ -56,9 +56,8 @@ export function chooseShow(links, query) {
 }
 
 // Episode list HTML -> [{ num, href, ids }].
-// Three live dialects: aniwaves links carry /ep-N hrefs with data-num; the
-// anikoto/anisuge clone family uses href="#" where the episode number rides
-// on data-num (anikoto) or data-slug (anisuge), and ids on data-ids alone.
+// The clone-family dialect: href="#"/"#0" where the episode number rides on
+// data-num (anikoto) or data-slug (anisuge), ids on data-ids alone.
 export function parseEpisodeList(html) {
   const out = [];
   for (const m of String(html || '').matchAll(/<a\b([^>]*)>/gi)) {
@@ -156,7 +155,7 @@ async function megaplayToHls(embedUrl, { userAgent = UA, referer, timeoutMs = T 
 }
 
 async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
-  const { label, providerId, dialect = 'ajax' } = cfg;
+  const { label, providerId } = cfg;
   const ref = (p) => `${mirror}${p.startsWith('/') ? p : `/${p}`}`;
   // 1. Filter -> best show match.
   const filter = await fetchText(`${mirror}/filter?keyword=${encodeURIComponent(title)}`, {
@@ -190,14 +189,10 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
   const sources = [];
   for (const s of group.servers.slice(0, 4)) {
     try {
-      // Two dialects: 'ajax' (aniwaves) powders the server id through
-      // /ajax/sources?id=..&asi=0&autoPlay=0; 'server' (anikoto/anisuge)
-      // hands the token itself to /ajax/server?get=<token>. Both resolve to
-      // { status, result: { url, skip_data } }.
+      // The clone family hands the server token straight to /ajax/server?get=
+      // and gets { status, result: { url, skip_data } } back.
       const srcText = await fetchText(
-        dialect === 'server'
-          ? `${mirror}/ajax/server?get=${s.linkId}`
-          : `${mirror}/ajax/sources?id=${s.linkId}&asi=0&autoPlay=0`,
+        `${mirror}/ajax/server?get=${s.linkId}`,
         { headers: { 'X-Requested-With': 'XMLHttpRequest' }, userAgent: UA, referer: showRef, timeoutMs: T }
       );
       const srcJson = JSON.parse(srcText);
@@ -226,7 +221,7 @@ async function resolveOnMirror(mirror, cfg, { title, epNum, audio }) {
   return { embedUrl: absUrl(mirror, watchRef), sources };
 }
 
-export function createClanAdapter({ id, name, site, sites, tokens, mirrors, label, dialect }) {
+export function createClanAdapter({ id, name, site, sites, tokens, mirrors, label }) {
   return {
     id,
     name,
@@ -243,7 +238,7 @@ export function createClanAdapter({ id, name, site, sites, tokens, mirrors, labe
       let firstErr = null;
       for (const mirror of mirrors) {
         try {
-          return await resolveOnMirror(mirror, { label, providerId: id, dialect }, { title, epNum, audio });
+          return await resolveOnMirror(mirror, { label, providerId: id }, { title, epNum, audio });
         } catch (e) {
           // First error wins: a later mirror's misleading error must not
           // mask the real failure.

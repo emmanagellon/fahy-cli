@@ -1,7 +1,7 @@
 import { createClanAdapter } from './clan.js';
 
-// Anisuge (FMHY-listed: animesuge.cz) — same ajax dialect as aniwaves.ru
-// (filter -> episode list -> server list -> sources), shared engine.
+// Anisuge (FMHY-listed: animesuge.cz) — shared clan engine
+// (filter -> episode list -> server list -> sources, with megaplay HLS.
 export const anisuge = createClanAdapter({
   id: 'anisuge',
   name: 'Anisuge',
@@ -10,5 +10,4 @@ export const anisuge = createClanAdapter({
   tokens: ['anisuge'],
   mirrors: ['https://animesuge.cz'],
   label: 'Anisuge',
-  dialect: 'server',
 });

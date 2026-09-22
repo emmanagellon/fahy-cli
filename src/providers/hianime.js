@@ -211,7 +211,7 @@ async function searchMirrors(keyword, opts = {}) {
       if (opts.debug) console.error(`[hianime] ${base}: ${e.message}`);
     }
   }
-  throw lastErr || new Error('HiAnime mirrors unreachable — try --provider miruro.');
+  throw lastErr || new Error('HiAnime mirrors unreachable — try --provider anikoto, anisuge, or kickassanime.');
 }
 
 export const hianime = {
