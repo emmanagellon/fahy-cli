@@ -1,9 +1,28 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { spawnSettled } from './lib/spawn.js';
 import { mpvPrivacyArgs, proxyUrl, ytDlpPrivacyArgs } from './lib/privacy.js';
+
+// Every spawned mpv is tracked so a CLI exit (Quit, Ctrl+C, fatal error)
+// never orphans an audible player — music especially keeps playing with no
+// window to stop it. Spawns unregister on close/error.
+const liveMpv = new Set();
+function trackChild(child) {
+  liveMpv.add(child);
+  child.once('close', () => liveMpv.delete(child));
+  child.once('error', () => liveMpv.delete(child));
+  return child;
+}
+export function killPlayerChildren() {
+  for (const c of liveMpv) {
+    try {
+      c.kill();
+    } catch {}
+  }
+  liveMpv.clear();
+}
+process.on('exit', () => killPlayerChildren());
 
 export function hasMpv() {
   try {
@@ -49,7 +68,22 @@ export function playUrl(url, { headers = null, subFile = null, skip = null, dire
   if (logFile) args.push(`--log-file=${logFile}`); // kunai --mpv-log-file: evidence for bug reports
   args.push(url);
   if (debug) console.error(`[player] mpv ${args.join(' ')}`);
-  return spawnSettled('mpv', args, { stdio: 'inherit' });
+  return spawnMpv(args);
+}
+
+function spawnMpv(args) {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = trackChild(spawn('mpv', args, { stdio: 'inherit', shell: false }));
+    } catch {
+      resolve({ code: -1, ms: 0 });
+      return;
+    }
+    child.on('error', () => resolve({ code: -1, ms: Date.now() - started }));
+    child.on('close', (code) => resolve({ code, ms: Date.now() - started }));
+  });
 }
 
 // kunai-style autoskip: tiny generated lua that jumps over intro/outro segments.
@@ -142,5 +176,5 @@ export function playFile(file, { volume = null, clean = false, logFile = null, d
   if (logFile) args.push(`--log-file=${logFile}`);
   args.push(file);
   if (debug) console.error(`[player] mpv ${args.join(' ')}`);
-  return spawnSettled('mpv', args, { stdio: 'inherit' });
+  return spawnMpv(args);
 }

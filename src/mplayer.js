@@ -192,6 +192,10 @@ export class MusicPlayer extends EventEmitter {
     await this.send('cycle', 'pause');
   }
 
+  async pause() {
+    await this.send('set_property', 'pause', true);
+  }
+
   async seek(secs) {
     await this.send('seek', secs, 'relative');
   }

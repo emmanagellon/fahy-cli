@@ -14,7 +14,7 @@ import { searchAnime, ytMix, formatDuration } from './metadata.js';
 import { forKind, getProvider, providers, orderProviders, providerTags } from './providers/registry.js';
 
 import { parseVideoId } from './providers/youtube.js';
-import { hasMpv, playUrl, playFile, prescreenEmbed, extractDirectUrl } from './player.js';
+import { hasMpv, playUrl, playFile, prescreenEmbed, extractDirectUrl, killPlayerChildren } from './player.js';
 import { hasYtDlp, downloadSource, guessFile, defaultDownloadDir, defaultMusicDir, freeSpaceBytes } from './downloader.js';
 import {
   getHistory, addHistory, clearHistory, removeHistory, updateHistory, getDownloads, addDownload,
@@ -912,6 +912,7 @@ async function killMusicDaemon() {
 process.on('exit', () => {
   try {
     musicDaemon?.proc?.kill();
+    killPlayerChildren();
   } catch {}
 });
 
@@ -962,6 +963,13 @@ async function playMusicTrack(media, provider) {
       config.volume = v;
     },
   });
+  // q/ESC leaves the now-playing screen but must pause the track — "exit" is
+  // a stop, not a background continuous-play. resume happens on next load().
+  if (r.action === 'menu') {
+    try {
+      await live.pause();
+    } catch {}
+  }
   // Persist where the track was left (keys and natural end alike).
   try {
     const pos = live.state.timePos || 0;
