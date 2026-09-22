@@ -1,6 +1,6 @@
 # fahy
 
-Anime, YouTube, and music in your terminal. mpv-only, no API keys.
+Anime, YouTube, and music in your terminal. 
 
 ## Features
 
@@ -57,7 +57,6 @@ npm run smoke -- --offline
 
 Anime providers backed by the clan engine (anikoto, anisuge) are one `createClanAdapter` call in `src/providers/clan.js`; standalone providers return `{ embedUrl, sources }` per `src/providers/base.js`. Register either in `src/providers/registry.js`.
 
-FMHY anime sources that are behind Cloudflare or JS-wall players (animepahe, aniwave, miruro) are intentionally omitted rather than shipped as dead links.
 
 ## License
 
