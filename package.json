@@ -1,0 +1,58 @@
+{
+  "name": "fahy-cli",
+  "version": "0.6.2",
+  "description": "Anime, YouTube and music terminal player — search, pick, and watch in mpv",
+  "type": "module",
+  "bin": {
+    "fahy": "./src/index.js"
+  },
+  "files": [
+    "src/",
+    "scripts/",
+    "install.ps1",
+    "install.sh",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node scripts/check.js",
+    "audit": "node scripts/audit.js",
+    "smoke": "node scripts/smoke.js",
+    "smoke:offline": "node scripts/smoke.js --offline"
+  },
+  "keywords": [
+    "anime",
+    "youtube",
+    "music",
+    "cli",
+    "tui",
+    "mpv",
+    "yt-dlp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emmanagellon/fahy-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/emmanagellon/fahy-cli/issues"
+  },
+  "homepage": "https://github.com/emmanagellon/fahy-cli#readme",
+  "dependencies": {
+    "@clack/prompts": "^0.8.2",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "ink": "^5.2.1",
+    "ink-select-input": "^6.2.0",
+    "ink-text-input": "^6.0.0",
+    "ora": "^8.1.1",
+    "react": "^18.3.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "ink-testing-library": "^4.0.0"
+  }
+}
