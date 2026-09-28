@@ -12,8 +12,26 @@ import { discoverCurl } from './net.js';
 const DEFAULT_TIMEOUT_MS = 5000;
 
 export async function probeUrl(url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = {}) {
-  if (/\.m3u8([?#]|$)/i.test(url)) return probeHls(url, headers, timeoutMs, signal);
-  return probeHttp(url, headers, timeoutMs, signal);
+  // Hard timeout: the entire probe (including all sequential HLS fetches)
+  // must complete within timeoutMs + a small grace period.
+  const hardTimeoutMs = timeoutMs + 1000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error('probe hard timeout')), hardTimeoutMs);
+  const onAbort = () => ctrl.abort(signal?.reason);
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timer);
+      throw signal.reason || new Error('aborted');
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+  try {
+    if (/\.m3u8([?#]|$)/i.test(url)) return await probeHls(url, headers, timeoutMs, ctrl.signal);
+    return await probeHttp(url, headers, timeoutMs, ctrl.signal);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 export function probePassesForPlayback(probe) {

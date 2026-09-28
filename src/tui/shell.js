@@ -873,26 +873,35 @@ function ShellFrame({ config }) {
     : S.route === 'menu' ? 'menu' : S.route === 'error' ? 'error'
     : S.route === 'nowplaying' ? 'now playing'
     : S.search.step === 'search' ? 'search' : 'details';
+  // Persistent layout: fixed header (2 lines) + content area + footer (1 line)
+  const termH = process.stdout.rows || 24;
+  const contentH = Math.max(5, termH - 5); // reserve header + footer + padding
+  // Limit transcript to prevent unbounded growth
+  const maxTranscript = Math.min(5, contentH - 3);
+  const transcript = S.transcript.slice(-maxTranscript);
   return e(
     Box,
     { flexDirection: 'column' },
+    // Header (stable)
     e(
       Box,
       { marginBottom: 1 },
       e(Text, { bold: true }, 'fahy'),
       e(Text, { dimColor: true }, '  ' + tabs + `   ${crumb}`)
     ),
+    // Content area (updates in place)
     e(
       Box,
       { flexDirection: 'column' },
-      ...S.transcript.map((l) => e(Text, { key: l.id, dimColor: l.kind !== 'error' && l.kind !== 'warn', color: l.kind === 'error' ? 'red' : l.kind === 'warn' ? 'yellow' : undefined }, short(l.text, 110)))
+      ...transcript.map((l) => e(Text, { key: l.id, dimColor: l.kind !== 'error' && l.kind !== 'warn', color: l.kind === 'error' ? 'red' : l.kind === 'warn' ? 'yellow' : undefined }, short(l.text, 110))),
+      S.status
+        ? e(Box, null, e(Text, { color: 'green' }, SPINNER[S.frame % SPINNER.length] + ' '), e(Text, { dimColor: true }, short(S.status.text, 100)))
+        : null,
+      e(ShellKeys, null),
+      renderScreen(),
+      S.help ? helpBox() : null,
     ),
-    S.status
-      ? e(Box, null, e(Text, { color: 'green' }, SPINNER[S.frame % SPINNER.length] + ' '), e(Text, { dimColor: true }, short(S.status.text, 100)))
-      : null,
-    e(ShellKeys, null),
-    renderScreen(),
-    S.help ? helpBox() : null,
+    // Footer (stable)
     e(Box, { marginTop: 1 }, e(Text, { dimColor: true }, footerFor()))
   );
 }
