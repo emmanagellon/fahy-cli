@@ -427,7 +427,11 @@ function helpBox() {
 }
 
 function rows(items, hi) {
-  return items.map((o, i) => e(
+  // Responsive: limit visible items to available terminal height
+  const termH = process.stdout.rows || 24;
+  const maxItems = Math.max(3, termH - 10); // reserve space for header/footer/status
+  const visible = items.slice(0, maxItems);
+  return visible.map((o, i) => e(
     Box,
     { key: o.key || String(i) },
     e(Text, { color: i === hi ? 'green' : undefined }, i === hi ? '❯ ' : '  '),

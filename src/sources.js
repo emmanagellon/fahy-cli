@@ -53,10 +53,7 @@ export function parseFmhyAnimeSection(html) {
   return parseFmhySection(html, 'anime-streaming');
 }
 
-// Extract { name, url, host } entries from FMHY's Streaming Sites section.
-export function parseFmhyStreamingSection(html) {
-  return parseFmhySection(html, 'streaming-sites');
-}
+
 
 // Match providers against FMHY entries by host overlap, falling back to
 // name tokens (catches domain drift: same site, new TLD).
@@ -91,25 +88,7 @@ export async function fetchFmhyAnimeSites(opts = {}) {
   return parseFmhyAnimeSection(html);
 }
 
-// Fetch FMHY's Streaming Sites section (movies/TV).
-export async function fetchFmhyStreamingSites(opts = {}) {
-  const html = await fetchText(FMHY_VIDEO_URL, {
-    timeoutMs: opts.timeoutMs || 15000,
-    userAgent: 'Mozilla/5.0',
-    debug: opts.debug,
-  });
-  return parseFmhyStreamingSection(html);
-}
 
-// Match movie/TV providers against FMHY streaming sites entries.
-export function matchStreamingCoverage(fmhySites, providers) {
-  return matchCoverage(fmhySites, providers);
-}
-
-// Diff FMHY streaming sites against our movie/TV providers.
-export function diffFmhyStreamingSources(fmhySites, laneProviders) {
-  return diffFmhySources(fmhySites, laneProviders);
-}
 
 // Probe each provider's primary site. Returns [{ id, url, status, ms }].
 export async function probeProviders(list, { timeoutMs = 8000 } = {}) {

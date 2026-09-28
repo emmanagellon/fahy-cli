@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// fahy-cli — anime + YouTube + music terminal player (kunai-inspired).
+// fahy-cli — anime + movie + TV + YouTube + music terminal player.
 // Search -> pick -> play in mpv (audio-only for music) / download via yt-dlp.
 // History + downloads + favorites persist in ~/.config/fahy-cli (JSON).
 import { Command } from 'commander';
@@ -831,11 +831,9 @@ async function pickProvider(media) {
 async function resolveMedia(provider, media) {
   const spin = startSpin(`Resolving ${provider.name}…`);
   try {
-    if (media.kind === 'anime' && !media.anime) media.anime = { ...media };
-    // No trailing ...media spread — it would overwrite episode {number}.
     let input;
     if (media.kind === 'anime') {
-      input = { title: media.title, anilistId: media.anilistId, anime: media.anime || media, episode: media.episodeRef || { number: media.episode } };
+      input = { title: media.title, anilistId: media.anilistId, episode: media.episode };
     } else if (media.kind === 'movie' || media.kind === 'tv') {
       input = { ...media, kind: media.kind, tmdbId: media.tmdbId, title: media.title, year: media.year, season: media.season, episode: media.episode };
     } else {
