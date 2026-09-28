@@ -26,7 +26,7 @@ fahy -m -S "bohemian rhapsody"
 | Mode | Providers |
 |------|-----------|
 | Anime | hianime, anikoto, anisuge |
-| Movie/TV | lookmovie, movy, flixer |
+| Movie/TV | lookmovie, movy, 7movies, flixer, rive, 67movies |
 | YouTube | youtube |
 | Music | ytmusic |
 
