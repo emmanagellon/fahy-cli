@@ -72,12 +72,18 @@ let waiter = null;
 let searchTimer = null;
 let searchToken = 0;
 let spinnerTimer = null;
+let renderQueued = false;
 
 function update() {
-  // Calls before mount-effects attach are intentionally dropped: startShell
-  // always commits correct initial state, so there is nothing stale to fix.
-  // (Tests must await a tick after render() before driving api calls.)
-  if (notify) notify();
+  // Debounce: coalesce multiple synchronous updates into one render.
+  // Without this, rapid state changes (e.g., transcript push + status clear)
+  // cause multiple re-renders that stack frames on the terminal.
+  if (renderQueued) return;
+  renderQueued = true;
+  queueMicrotask(() => {
+    renderQueued = false;
+    if (notify) notify();
+  });
 }
 
 function answer(v) {
