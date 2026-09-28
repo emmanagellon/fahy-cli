@@ -393,13 +393,13 @@ function footerFor() {
   if (S.help) return '? / esc close help';
   switch (S.route) {
     case 'home':
-      return 'tab switch · ←→↑↓ move · enter open · esc quit · s search · ? help';
+      return 'tab switch · ↑↓ move · enter select · esc quit · s search · ? help';
     case 'history':
-      return '←→↑↓ move · enter resume · esc back · s search';
+      return '↑↓ move · enter resume · esc back · s search';
     case 'menu':
-      return '←→↑↓ move · enter select · esc back';
+      return '↑↓ move · enter select · esc back';
     case 'error':
-      return 'any key to continue';
+      return 'enter continue';
     case 'nowplaying':
       return 'space pause · ←/→ seek · n/p next/prev · +/- vol · m mute · q menu';
     default: {
@@ -407,8 +407,8 @@ function footerFor() {
       if (st === 'search') return 'tab switch · ↑↓ navigate · enter select · esc back · ? help';
       if (st === 'busy') return 'working… · esc back';
       if (st === 'episode') return 'type number · enter select · esc back';
-      if (st === 'eplist') return '←→↑↓ move · enter select · esc back · s search';
-      return '←→↑↓ move · enter select · esc back · s search';
+      if (st === 'eplist') return '↑↓ move · enter select · esc back · s search';
+      return '↑↓ move · enter select · esc back · s search';
     }
   }
 }
@@ -420,8 +420,9 @@ function helpBox() {
     e(Text, { dimColor: true }, 'keys'),
     e(Text, { dimColor: true }, '  tab  switch anime / movie / tv / youtube / music'),
     e(Text, { dimColor: true }, '  ↑↓   move · enter select · esc back / quit'),
-    e(Text, { dimColor: true }, '  ←→   back / select in lists (never while typing)'),
+    e(Text, { dimColor: true }, '  ←    back (never while typing)'),
     e(Text, { dimColor: true }, '  s    new search from browse screens'),
+    e(Text, { dimColor: true }, '  ?    toggle this help'),
     e(Text, { dimColor: true }, '  space pause · ←/→ seek (now playing)')
   );
 }
@@ -471,27 +472,32 @@ function renderScreen() {
 function renderHome() {
   const history = getHistory().filter((x) => ['anime', 'movie', 'tv', 'youtube', 'music'].includes(x.kind)).slice(0, 15);
   const items = homeItems(history, S.search.mode);
-  return e(Box, { flexDirection: 'column' }, e(InnerList, {
-    items,
-    nav: true,
-    onPick: (idx) => {
-      const item = items[idx];
-      if (!item) return;
-      if (item.value === 'search') {
-        S.route = 'search';
-        S.uiHi = 0;
-        update();
-      } else if (item.value === 'continue' && history[0]) {
-        resumeEntry(history[0]);
-      } else if (item.value === 'history') {
-        S.histHi = 0;
-        S.route = 'history';
-        update();
-      } else if (item.value === 'quit') {
-        answer(null);
-      }
-    },
-  }));
+  return e(
+    Box,
+    { flexDirection: 'column' },
+    e(Text, { dimColor: true }, 'Home'),
+    e(InnerList, {
+      items,
+      nav: true,
+      onPick: (idx) => {
+        const item = items[idx];
+        if (!item) return;
+        if (item.value === 'search') {
+          S.route = 'search';
+          S.uiHi = 0;
+          update();
+        } else if (item.value === 'continue' && history[0]) {
+          resumeEntry(history[0]);
+        } else if (item.value === 'history') {
+          S.histHi = 0;
+          S.route = 'history';
+          update();
+        } else if (item.value === 'quit') {
+          answer(null);
+        }
+      },
+    })
+  );
 }
 
 export function historyItems(history, hi) {
@@ -500,7 +506,7 @@ export function historyItems(history, hi) {
 
 function renderHistory() {
   const history = getHistory().filter((x) => ['anime', 'movie', 'tv', 'youtube', 'music'].includes(x.kind)).slice(0, 15);
-  if (!history.length) return e(Text, { dimColor: true }, 'Nothing watched yet — pick Search.');
+  if (!history.length) return e(Box, { flexDirection: 'column' }, e(Text, { dimColor: true }, 'Nothing watched yet.'), e(Text, { dimColor: true }, 'Search for something to start watching.'));
   const items = historyItems(history, S.histHi);
   return e(Box, { flexDirection: 'column' }, e(InnerList, {
     items,
@@ -535,12 +541,11 @@ function renderMenu() {
 }
 
 function renderError() {
-  // No in-screen hint here — the frame footer already says it (doubling the
-  // line is what produced the stacked "any key to continue" look).
   return e(
     Box,
     { flexDirection: 'column' },
-    e(Text, { color: 'red' }, '✕ ' + short(S.errorBox?.message || 'Something failed.', 200))
+    e(Text, { color: 'red' }, '✕ ' + short(S.errorBox?.message || 'Something failed.', 200)),
+    e(Text, { dimColor: true, marginTop: 1 }, 'Press Enter to continue.')
   );
 }
 
@@ -549,7 +554,7 @@ function renderNowPlaying() {
   if (!np) return null;
   const { timePos, duration, paused } = np.player.state;
   const frac = duration > 0 && timePos >= 0 ? Math.max(0, Math.min(1, timePos / duration)) : 0;
-  const W = 40;
+  const W = Math.min(60, Math.max(20, (process.stdout.columns || 80) - 20));
   const fill = Math.round(frac * W);
   return e(
     Box,
@@ -582,23 +587,23 @@ function renderSearch() {
           placeholder: 'Search ' + modeLabel(st.mode).toLowerCase() + '...',
         })
       ),
-      st.loading ? e(Text, { dimColor: true }, ' …') : null,
+      st.loading ? e(Text, { dimColor: true }, ' Searching…') : null,
       st.error ? e(Text, { color: 'yellow' }, short(st.error, 100)) : null,
       st.results.length > 0
         ? e(Box, { marginTop: 1, flexDirection: 'column' }, e(SearchResults, null))
         : null,
       !st.query && st.results.length === 0
-        ? e(Text, { dimColor: true }, 'tab switch · esc back · ? help')
+        ? e(Text, { dimColor: true }, 'Type to search · tab switch mode · esc back · ? help')
         : null
     );
   }
-  if (st.step === 'busy') return e(Text, { dimColor: true }, st.busyMsg || 'Loading…');
+  if (st.step === 'busy') return e(Box, { flexDirection: 'column' }, e(Text, { dimColor: true }, st.busyMsg || 'Loading…'), e(Text, { dimColor: true }, 'Press esc to cancel.'));
   if (st.step === 'aseason') {
     const isTvSeason = st.chainKind === 'tv-season';
     return e(
       Box,
       { flexDirection: 'column' },
-      e(Text, { dimColor: true }, 'Season:'),
+      e(Text, { dimColor: true }, isTvSeason ? 'Select season:' : 'Select series:'),
       e(InnerList, {
         items: st.chain.map((c, i) => ({
           key: isTvSeason ? String(c.seasonNumber) : String(c.anilistId),
@@ -635,7 +640,6 @@ function renderSearch() {
       e(InnerList, {
         items,
         nav: true,
-        // InnerList reports the ROW index — resolve it to the item first.
         onPick: (rowIdx) => {
           const v = items[rowIdx]?.value;
           if (v === '__prev') {
@@ -664,7 +668,7 @@ function renderSearch() {
       e(
         Box,
         null,
-        e(Text, { dimColor: true }, 'episode › '),
+        e(Text, { dimColor: true }, 'Episode › '),
         e(TextInput, {
           value: st.episode,
           onChange: (v) => {
@@ -685,8 +689,6 @@ function renderSearch() {
     const providers = forKind(kind);
     const def = shellConfig?.defaultProvider?.[kind];
     const ordered = [...providers].sort((a, b) => (a.id === def ? -1 : b.id === def ? 1 : 0));
-    // Best-for-you marker comes from observed playback health, refreshed by
-    // the daily FMHY watcher + every run — no probes, no waiting.
     const tags = providerTags(ordered, { health: getHealth(), isBlocked: (id) => healthBlocked(id) });
     const tagSuffix = (id) => (tags[id] ? ` · ${tags[id]}` : '');
     const episodeNum = kind === 'tv' ? Math.max(1, Number(st.episode) || 1) : kind === 'anime' ? Math.max(1, Number(st.episode) || 1) : 1;
@@ -698,7 +700,6 @@ function renderSearch() {
       e(InnerList, {
         items: ordered.map((x) => ({ key: x.id, label: x.name + (x.id === def ? ' (default)' : '') + tagSuffix(x.id), value: x.id })),
         nav: true,
-        // InnerList reports the ROW index — map back to the provider id.
         onPick: (rowIdx) => {
           const chosen = ordered[rowIdx];
           if (!chosen) return;
