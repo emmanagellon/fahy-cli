@@ -105,6 +105,13 @@ export function shellLog(text, kind = 'dim') {
   update();
 }
 
+// Clear the transcript for a clean state (e.g., before playback).
+export function shellClear() {
+  S.transcript = [];
+  S.status = null;
+  update();
+}
+
 let spinnerTimeout = null;
 
 export function shellStatus(text) {

@@ -1530,9 +1530,11 @@ async function playOrDownload(media, provider, source, extra = {}) {
   }
 
   if (useTuiShell) {
-    // Transcript lines, not console: the shell owns the screen.
-    tlog(`fahy  ${media.title}${mediaTag(media)} — ${provider.name}`, 'raw');
-    tlog(`  ▶ Playing in mpv — q to stop${media.kind === 'music' ? ', audio only' : ''}`);
+    // Clear transcript for a clean playback state, then show status
+    const { shellLog: log, shellStatus: status, shellClear: clear } = await import('./tui/shell.js');
+    clear();
+    log(`fahy  ${media.title}${mediaTag(media)} — ${provider.name}`, 'raw');
+    status(`▶ Playing in mpv — q to stop${media.kind === 'music' ? ', audio only' : ''}`);
   } else {
     console.log(chalk.dim(`\n${media.title}${mediaTag(media)} — ${provider.name} → ${source.type}`));
     console.log(chalk.cyan(source.url));
