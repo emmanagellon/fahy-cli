@@ -45,7 +45,7 @@ function friendly(err) {
 }
 
 function defaultProviderFor(config, kind) {
-  return config.defaultProvider?.[kind] || (kind === 'anime' ? 'hianime' : kind === 'movie' ? 'movy' : kind === 'tv' ? 'movy' : kind === 'music' ? 'ytmusic' : 'youtube');
+  return config.defaultProvider?.[kind] || (kind === 'anime' ? 'hianime' : kind === 'movie' ? 'lookmovie' : kind === 'tv' ? 'lookmovie' : kind === 'music' ? 'ytmusic' : 'youtube');
 }
 
 function SearchApp({ config, initialMode, onDone }) {

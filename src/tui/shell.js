@@ -40,7 +40,7 @@ export function fmtClock(s) {
 }
 
 function defaultProviderFor(config, kind) {
-  return config.defaultProvider?.[kind] || (kind === 'anime' ? 'hianime' : kind === 'movie' ? 'movy' : kind === 'tv' ? 'movy' : kind === 'music' ? 'ytmusic' : 'youtube');
+  return config.defaultProvider?.[kind] || (kind === 'anime' ? 'hianime' : kind === 'movie' ? 'lookmovie' : kind === 'tv' ? 'lookmovie' : kind === 'music' ? 'ytmusic' : 'youtube');
 }
 
 // External store: survives suspend/resume because it lives outside React.
@@ -207,7 +207,7 @@ function runSearch() {
         update();
       }
     }
-  }, 350);
+  }, 500);
 }
 
 // Shared transitions.

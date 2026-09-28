@@ -4,15 +4,13 @@ import { anisuge } from './anisuge.js';
 import { youtube } from './youtube.js';
 import { ytmusic } from './ytmusic.js';
 import { lookmovie } from './lookmovie.js';
-import { movy } from './movy.js';
-import { flixer } from './flixer.js';
 import { scoreOf, bestScoredId } from '../store.js';
 
 // Anime adapters are FMHY https://fmhy.net/video sources (hianime, anikoto,
 // anisuge). YouTube is FMHY-listed under Video Streaming;
 // music rides YouTube via yt-dlp (audio-only mpv).
-// Movie/TV providers: lookmovie, movy, flixer (FMHY streaming sites).
-export const providers = [hianime, anikoto, anisuge, youtube, ytmusic, lookmovie, movy, flixer];
+// Movie/TV providers: lookmovie (FMHY streaming site).
+export const providers = [hianime, anikoto, anisuge, youtube, ytmusic, lookmovie];
 
 export const forKind = (kind) => providers.filter((p) => p.kinds.includes(kind));
 export const getProvider = (id) => providers.find((p) => p.id === id);

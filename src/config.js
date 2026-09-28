@@ -6,7 +6,7 @@ const dir = configDir();
 const file = join(dir, 'config.json');
 
 const defaults = {
-  defaultProvider: { anime: 'hianime', youtube: 'youtube', music: 'ytmusic', movie: 'movy', tv: 'movy' },
+  defaultProvider: { anime: 'hianime', youtube: 'youtube', music: 'ytmusic', movie: 'lookmovie', tv: 'lookmovie' },
   autoUpdate: 'notice', // notice | install | off
   volume: 100,
   shuffle: false,

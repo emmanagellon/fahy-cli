@@ -13,9 +13,46 @@ function apiKey(opts = {}) {
   return opts.apiKey || process.env.TMDB_API_KEY || DEFAULT_API_KEY;
 }
 
+// Simple in-memory cache for TMDB search results (5 min TTL)
+const searchCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
+function getCached(key) {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL) {
+    searchCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCached(key, data) {
+  searchCache.set(key, { ts: Date.now(), data });
+}
+
+// Retry with exponential backoff for rate limits
+async function fetchWithRetry(url, opts = {}, maxRetries = 2) {
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      return await fetchJsonVia(url, opts);
+    } catch (e) {
+      if (i < maxRetries && /invalid JSON|rate|429|timeout/i.test(e.message)) {
+        await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 // Search TMDB multi (movies + TV shows). Returns normalized results with
 // kind: 'movie' | 'tv', tmdbId, title, year, poster.
 export async function searchTmdb(query, opts = {}) {
+  const cacheKey = `search:${query.toLowerCase()}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
   const params = new URLSearchParams({
     query,
     include_adult: 'false',
@@ -24,7 +61,7 @@ export async function searchTmdb(query, opts = {}) {
     api_key: apiKey(opts),
   });
   const url = `${TMDB_BASE}/search/multi?${params}`;
-  const data = await fetchJsonVia(url, {
+  const data = await fetchWithRetry(url, {
     timeoutMs: opts.timeoutMs || 15000,
     signal: opts.signal,
     debug: opts.debug,
@@ -47,6 +84,7 @@ export async function searchTmdb(query, opts = {}) {
         rating: r.vote_average ?? null,
       };
     });
+  setCached(cacheKey, results);
   return results;
 }
 

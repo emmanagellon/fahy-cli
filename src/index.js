@@ -1135,7 +1135,7 @@ async function sessionLoop(media, provider) {
         } else if (lastList.length > 1) {
           qi = (qi + 1) % lastList.length;
           media = { ...lastList[qi] };
-          provider = getProvider(media.kind === 'music' ? 'ytmusic' : media.kind === 'movie' ? 'movy' : media.kind === 'tv' ? 'movy' : 'youtube') || provider;
+          provider = getProvider(media.kind === 'music' ? 'ytmusic' : media.kind === 'movie' ? 'lookmovie' : media.kind === 'tv' ? 'lookmovie' : 'youtube') || provider;
         } else {
           break;
         }
