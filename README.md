@@ -2,9 +2,6 @@
 
 Anime, movies, TV, YouTube, and music in your terminal.
 
-A run is a **command**: it prints, it asks only when there is a real choice
-left, and it exits. There is no full-screen shell.
-
 ## Install
 
 ```powershell
