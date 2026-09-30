@@ -38,19 +38,107 @@ function save(name, data) {
 }
 
 // --- Watch history ---
+//
+// The record has to be enough to put the user back exactly where they stopped:
+// which show, which season/episode (and that episode's provider-side id), how
+// far in they were, and how long the thing runs. Resume accuracy comes from
+// these fields, so they are written at play time rather than guessed later.
+export const HISTORY_CAP = 200;
+
+const numOrNull = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+function normalizeHistory(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (!e.url && !e.title) return null;
+  return {
+    title: String(e.title || '').slice(0, 300),
+    kind: e.kind || null,
+    videoId: e.videoId || null,
+    anilistId: e.anilistId || null,
+    tmdbId: e.tmdbId || null,
+    season: numOrNull(e.season),
+    episode: numOrNull(e.episode),
+    episodeId: e.episodeId || null,
+    duration: numOrNull(e.duration),
+    // Resume offset in ms. `watchedMs` is the older name (it used to mean
+    // "how long the last mpv session ran"); old files still resume from it.
+    positionMs: numOrNull(e.positionMs) ?? numOrNull(e.watchedMs),
+    completed: !!e.completed,
+    audio: e.audio || null,
+    provider: e.provider || null,
+    providerId: e.providerId || null,
+    url: e.url || null,
+  };
+}
+
+// Partial updates must not blank out fields the caller did not mention.
+function definedOnly(patch) {
+  const out = {};
+  for (const [k, v] of Object.entries(patch || {})) if (v !== undefined) out[k] = v;
+  return out;
+}
+
 export function getHistory() {
   const h = load('history.json', []);
-  return Array.isArray(h) ? h : [];
+  if (!Array.isArray(h)) return [];
+  // Normalize on read so pre-existing rows gain the new resume fields.
+  return h
+    .map((e) => {
+      const n = normalizeHistory(e);
+      return n ? { ...e, ...n } : null;
+    })
+    .filter(Boolean);
+}
+
+// Identity of the thing watched, independent of which source served it.
+// One episode is one entry no matter how many providers were tried: without
+// this, a run that falls back through three sources leaves three rows and
+// `fahy history` fills with duplicates of the same episode.
+export function historyKey(e) {
+  if (!e) return null;
+  const kind = e.kind;
+  if (kind === 'anime') return `anime:${e.anilistId || e.title || ''}:S${e.season || 1}:E${e.episode || 1}`;
+  if (kind === 'tv') return `tv:${e.tmdbId || e.title || ''}:S${e.season || 1}:E${e.episode || 1}`;
+  if (kind === 'movie') return `movie:${e.tmdbId || e.title || ''}`;
+  if (kind === 'youtube' || kind === 'music') return `${kind}:${e.videoId || e.url || ''}`;
+  return null;
 }
 
 export function addHistory(entry) {
+  const row = normalizeHistory(entry);
+  if (!row) return null;
   const h = getHistory();
-  h.unshift({ ...entry, at: new Date().toISOString() });
-  save('history.json', h.slice(0, 200));
+  const key = historyKey(row);
+  const at = new Date().toISOString();
+  // A re-watch of the same item replaces its row rather than stacking a new
+  // one, and the newest attempt leads the list.
+  const dup = key ? h.findIndex((x) => historyKey(x) === key) : -1;
+  if (dup >= 0) {
+    const prev = h[dup];
+    h.splice(dup, 1);
+    const merged = { ...prev, ...row, at };
+    if (row.positionMs == null) {
+      // This attempt never reported a position (a source that failed to
+      // start). Keep the last known offset rather than erasing it.
+      if (prev.positionMs != null) merged.positionMs = prev.positionMs;
+      if (prev.duration != null) merged.duration = prev.duration;
+      merged.completed = prev.completed;
+    } else {
+      // A real attempt: `completed` describes this watch, not the last one.
+      merged.completed = !!row.completed;
+    }
+    h.unshift(merged);
+  } else {
+    h.unshift({ ...row, at });
+  }
+  save('history.json', h.slice(0, HISTORY_CAP));
+  return h[0];
 }
 
 export function clearHistory() {
+  const n = getHistory().length;
   save('history.json', []);
+  return n;
 }
 
 // Remove entries by URL (selective delete keeps the rest).
@@ -83,9 +171,10 @@ export function setDownloadStatus(url, status, extra = {}) {
 export function updateHistory(url, patch) {
   const h = getHistory();
   const i = h.findIndex((e) => e.url === url);
-  if (i < 0) return;
-  h[i] = { ...h[i], ...patch };
+  if (i < 0) return false;
+  h[i] = { ...h[i], ...definedOnly(patch) };
   save('history.json', h);
+  return true;
 }
 
 export function getCompletedDownloads() {
@@ -105,6 +194,10 @@ export function getLastRun() {
 
 // Rebuild playable media from a history entry (continue/resume flows).
 // Returns null for retired lanes or entries without an identity.
+//
+// `positionMs` is carried out as a resume offset rather than folded into the
+// media: it is a property of *this attempt*, not of the title, and a retried
+// play of the same episode must not inherit an old offset.
 export function historyToMedia(e) {
   if (!e || !['anime', 'movie', 'tv', 'youtube', 'music'].includes(e.kind)) return null;
   if (e.kind === 'anime' && !e.anilistId && !e.title) return null;
@@ -113,9 +206,13 @@ export function historyToMedia(e) {
   return {
     media: {
       title: e.title, kind: e.kind, videoId: e.videoId || null, anilistId: e.anilistId || null,
-      tmdbId: e.tmdbId || null, season: e.season || null, episode: e.episode, url: e.url, duration: e.duration || null,
+      tmdbId: e.tmdbId || null, season: e.season || null, episode: e.episode || null,
+      episodeId: e.episodeId || null, url: e.url, duration: e.duration || null,
+      audio: e.audio || null,
     },
     providerId: e.providerId || null,
+    positionMs: numOrNull(e.positionMs),
+    completed: !!e.completed,
   };
 }
 

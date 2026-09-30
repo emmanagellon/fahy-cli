@@ -1,7 +1,7 @@
 {
   "name": "fahy-cli",
   "version": "0.6.2",
-  "description": "Anime, YouTube and music terminal player — search, pick, and watch in mpv",
+  "description": "Anime, TV, movies, YouTube and music terminal player - search, pick, and watch in mpv",
   "type": "module",
   "bin": {
     "fahy": "./src/index.js"
@@ -19,7 +19,8 @@
     "check": "node scripts/check.js",
     "audit": "node scripts/audit.js",
     "smoke": "node scripts/smoke.js",
-    "smoke:offline": "node scripts/smoke.js --offline"
+    "smoke:offline": "node scripts/smoke.js --offline",
+    "smoke:strict": "node scripts/smoke.js --offline --unhandled-rejections=strict"
   },
   "keywords": [
     "anime",
@@ -40,19 +41,10 @@
   },
   "homepage": "https://github.com/emmanagellon/fahy-cli#readme",
   "dependencies": {
-    "@clack/prompts": "^0.8.2",
     "chalk": "^5.3.0",
-    "commander": "^12.1.0",
-    "ink": "^5.2.1",
-    "ink-select-input": "^6.2.0",
-    "ink-text-input": "^6.0.0",
-    "ora": "^8.1.1",
-    "react": "^18.3.1"
+    "commander": "^12.1.0"
   },
   "engines": {
     "node": ">=18"
-  },
-  "devDependencies": {
-    "ink-testing-library": "^4.0.0"
   }
 }

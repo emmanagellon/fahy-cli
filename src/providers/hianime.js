@@ -312,7 +312,9 @@ export const hianime = {
     // NOTE: payload.downloadUrl (/download/...) is intentionally NOT offered:
     // it needs embed-session state — mpv/yt-dlp both reject it. HLS variants
     // cover watching, and yt-dlp downloads .m3u8 natively for --download.
-    return { embedUrl: watchUrl, sources };
+    // episodeId is echoed back so history can resume this exact episode
+    // without re-running the whole search -> episodes -> servers chain.
+    return { embedUrl: watchUrl, episodeId: entry.episodeId, sources };
   },
 };
 // Legacy: title-only resolve used to return a search page. Kept working via
